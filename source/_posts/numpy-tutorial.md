@@ -4,8 +4,7 @@ date: 2026-02-11 21:38:03
 tags:
   - Python
   - NumPy
-  - Data Science
-  - Machine Learning
+  - ML
   - AI
 categories:
   - Python

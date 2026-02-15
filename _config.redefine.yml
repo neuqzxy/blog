@@ -262,6 +262,9 @@ home:
 # ARTICLE >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> start
 # Docs: https://redefine-docs.ohevan.com/posts/articles
 articles:
+  # 文章页顶部 meta 信息（日期、更新时间、分类、标签、字数、阅读时间等），设为 false 可关闭
+  meta_info:
+    enable: false
   # Set the styles of the article
   style:
     font_size: 16px # Font size
@@ -286,7 +289,7 @@ articles:
     min2read: true # Whether to display reading time
   # Author label
   author_label: 
-    enable: true # Whether to enable
+    enable: false # Whether to enable
     auto: false # Whether to automatically add author label, e.g. Lv1, Lv2, Lv3...
     list: []
   # Code block settings
