@@ -49,34 +49,34 @@ $$
 p_{i} = P(X = x_{i})
 $$
 $$
-I(x_i) = -log(p_{i})
+I(x_i) = -\log(p_{i})
 $$
 $$
-H(X) = \mathbb{E}[I(X)] = -\sum_{i}p_{i}log(p_{i})
+H(X) = \mathbb{E}[I(X)] = -\sum_{i}p_{i}\log(p_{i})
 $$
 
 注意： 在计算熵时，我们约定 $\lim_{p \to 0} p \log p = 0$。这意味着发生概率为 0 的事件对系统的总熵没有贡献。
 
-# 相对熵(KL Divergence)$D_{KL}(P||Q)$
-> 衡量两个概率分布之间的“差异大小
+# 相对熵 (KL 散度) $D_{KL}(P\|Q)$
+> 衡量两个概率分布之间的“差异大小”
 
 如果我们用一个“不完美”的分布 $Q$ 来代替“真实”的分布 $P$，KL 散度衡量的是这种替代带来的信息损失或额外支付的惊奇度。
 
 离散型：
 $$
-D_{KL}(P||Q) = \sum_{i}P(x_i)log(\frac{P({x_i})}{Q(x_i)})
+D_{KL}(P\|Q) = \sum_{i}P(x_i)\log\frac{P(x_i)}{Q(x_i)}
 $$
 
 连续型：
 $$
-D_{KL}(P||Q) = \int_{-\infty}^{+\infty}P(x)log(\frac{P({x})}{Q(x)})dx
+D_{KL}(P\|Q) = \int_{-\infty}^{+\infty}P(x)\log\frac{P(x)}{Q(x)}\mathrm{d}x
 $$
 
-# 交叉熵(Cross Divergence)
+# 交叉熵 (Cross Entropy)
 > 用近似分布$Q$去编码真实分布$P$，得到的信息熵
 
 $$
-H(P,Q) = -\sum_{i}P_{x_i}log(Q_{x_i})
+H(P,Q) = -\sum_{i}P(x_i)\log Q(x_i)
 $$
 
 $$
@@ -84,6 +84,6 @@ H(P,Q) = H(P) + D_{KL}(P||Q)
 $$
 可以这样理解：
 $H(P)$： 真实世界的固有随机性（不可消除的最小代价）。
-$D_{KL}(P||Q)$： 因为我们模型找得不够准（用 $Q$ 去拟合 $P$）而产生的额外代价。
+$D_{KL}(P|Q)$：因为我们模型找得不够准（用 $Q$ 去拟合 $P$）而产生的额外代价。
 
-在优化神经网络时，真实标签 $P$ 通常是固定的（One-hot 编码），这意味着 $H(P)$ 是一个常数（通常为 0）。因此优化交叉熵就相当于优化KL Divergence
+在优化神经网络时，真实标签 $P$ 通常是固定的（One-hot 编码），这意味着 $H(P)$ 是一个常数（通常为 0）。因此优化交叉熵就相当于优化 KL 散度。

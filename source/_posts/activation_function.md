@@ -19,9 +19,9 @@ y = W_2(W_1x + b_1) + b_2 = (W_2W_1)x + (W_2b_1 + b_2) = W_{new}x + b_{new}
 $$
 这说明：**深度的增加对于纯线性模型没有意义**，它永远只能拟合超平面（高维空间里的 “平坦切片”），永远平坦、无弯曲、无褶皱。
 $$
-w1​x1​+w2​x2​+⋯+wn​xn​+b=0
+w_1 x_1 + w_2 x_2 + \cdots + w_n x_n + b = 0
 $$
-从矩阵角度看，$Wx + b$是放射变换，只能对向量空间进行旋转、缩放、剪切、平移操作，无法变出曲面来。
+从矩阵角度看，$Wx + b$是仿射变换，只能对向量空间进行旋转、缩放、剪切、平移操作，无法变出曲面来。
 
 而添加非线性项之后，能够拟合更为复杂的函数，根据**万能近似定理 (Universal Approximation Theorem)**，只要有至少一个非线性隐层，神经网络理论上可以拟合任何闭合区间内的连续函数。
 
@@ -34,9 +34,12 @@ $$
 # Sigmoid
 ![](/images/sigmoid.png)
 Sigmoid 函数的图像看起来像一个 S 形曲线。函数表达式如下：
-$$
-f(z)=1/(1+e^{-z})
-$$
+$
+\sigma(z)=1/(1+e^{-z})
+$
+$
+\sigma'(z) = \sigma(z)(1 - \sigma(z))
+$
 
 **缺点：**
 - 两侧对比较小的值会压缩的更小，容易梯度消失
@@ -44,23 +47,23 @@ $$
 - 不是 **zero-centered**（不以 0 为中心）
 
 **zero-centered**
-$\sigma(z) \ge 0 \$ 导致每一层的输入都是非负数，那么：
+$\sigma(z) \ge 0$ 导致每一层的输入都是非负数，那么：
 $$
-\frac{\partial L}{\partial w_i} = \frac{\partial L}{\partial z} $\cdot x_i$
+\frac{\partial L}{\partial w_i} = \frac{\partial L}{\partial z} \cdot x_i
 $$
 任意 $x_i \ge 0$ 导致所有参数只取决于 $\frac{\partial L}{\partial z}$ 同号，之字形收敛导致很慢
 
-# ReLu
+# ReLU
 ![](/images/relu.png)
 
 **缺点：**
-- Dead ReLU 问题。当输入为负时，ReLU 完全失效，在正向传播过程中，这不是问题。有些区域很敏感，有些则不敏感。但是在反向传播过程中，如果输入负数，则梯度将完全为零，sigmoid 函数和 tanh 函数也具有类似的问题，但是梯度趋近于 0（软死）；
+- Dead ReLU 问题。当输入为负时，ReLU 完全失效，在正向传播过程中，这不是问题。有些区域很敏感，有些则不敏感。但是在反向传播过程中，如果输入负数，则梯度将完全为零，Sigmoid 函数和 tanh 函数也具有类似的问题，但是梯度趋近于 0，被称之为饱和 (Saturation)。Sigmoid 是两端饱和，而 ReLU 是左侧完全硬饱和（梯度直接归零）。
 - 不是 **zero-centered**（不以 0 为中心）
 
 # Leaky ReLU
 ![](/images/Leaky_ReLU.png)
 
-与Relu的不同之处在于负轴保留了非常小的常数leak，使得输入信息小于0时，信息没有完全丢掉，进行了相应的保留
+与 ReLU 的不同之处在于负轴保留了非常小的常数leak，使得输入信息小于0时，信息没有完全丢掉，进行了相应的保留
 
 # Tanh
 
@@ -73,7 +76,7 @@ $
 $
 
 **优势：**
-- sigmoid 输出都挤在 0~1，数值小、偏软。tanh 输出在 -1~1，动态范围更大
+- sigmoid 输出都挤在 (0, 1)，数值小、偏软。tanh 输出在 (-1, 1)，动态范围更大
 - 是 **zero-centered**
 
 **劣势：**
@@ -82,14 +85,27 @@ $
 
 对神经网络来说，输出数值跨度越大，信号越强，梯度越明显。
 
-# SoftMax
+# Softmax
 
 Softmax 适用于多类分类问题的激活函数，在多类分类问题中，超过两个类标签则需要类成员关系。对于长度为 K 的任意实向量，Softmax 可以将其压缩为长度为 K，值在（0，1）范围内，并且向量中元素的总和为 1 的实向量。公式为：
-
-$ \text{softmax}(x_i) = \frac{e^{x_i}}{\sum_j e^{x_j}} $
+$$
+y_i = \text{softmax}(x_i) = \frac{e^{x_i}}{\sum_j e^{x_j}}
+$$
+$$
+\frac{\partial y_i}{\partial x_j} = \begin{cases}
+y_i(1 - y_i) & i = j\\\\
+-y_i y_j & i \neq j
+\end{cases}
+$$
 
 Softmax 激活函数的主要缺点是对输入敏感，易受极端值/异常值主导：
 - 输入过大：输出概率分布会极度尖锐，导致梯度消失，反向传播时梯度趋近于0
 - 输入过小：输出分布趋于均匀，失去区分度
 假设某次计算的注意力分数为[1000, 10, 5]，Softmax输出为：$ \text{softmax}([1000,10,5]) \approx [1,0,0] $
 此时梯度几乎无法传播到非最大值位置，会出现梯度消失现象，导致模型不能更新。
+
+**优化方案**
+1. **Normalization (BN/LN)**：
+在进入 Softmax 之前，通过 **Batch Norm** 或 **Layer Norm** 将神经元的输出重新拉回到均值为 0、方差为 1 的标准分布。这保证了输入给 Softmax 的值不会出现极端巨大的量级差异，从而让梯度能够健康地流动。
+2. **Temperature Scaling**
+在 Transformer 等模型中，注意力分数计算后会除以 $\sqrt{d_k}$。这本质上也是为了防止 Softmax 的输入过大，导致输出分布过于“尖锐”（极端的 0 和 1），从而避开梯度消失区。
