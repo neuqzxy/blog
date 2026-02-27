@@ -109,3 +109,86 @@ Softmax 激活函数的主要缺点是对输入敏感，易受极端值/异常�
 在进入 Softmax 之前，通过 **Batch Norm** 或 **Layer Norm** 将神经元的输出重新拉回到均值为 0、方差为 1 的标准分布。这保证了输入给 Softmax 的值不会出现极端巨大的量级差异，从而让梯度能够健康地流动。
 2. **Temperature Scaling**
 在 Transformer 等模型中，注意力分数计算后会除以 $\sqrt{d_k}$。这本质上也是为了防止 Softmax 的输入过大，导致输出分布过于“尖锐”（极端的 0 和 1），从而避开梯度消失区。
+
+# Swish (SiLU)
+![](/images/silu.png)
+Swish 是由 Google 在 2017 年提出的，后来在研究中发现 $\beta=1$ 时的 Swish（也称为 **SiLU**, Sigmoid Linear Unit）表现最为稳健。
+**数学公式**
+
+$$
+Swish(x) = x \cdot \sigma(\beta x) = \frac{x}{1 + e^{-\beta x}}
+$$
+
+通常在深度学习框架中，默认 $\beta = 1$。
+
+**优势：**
+- **自门控 (Self-Gated)：** 它的形式可以看作是 $x$ 乘以一个关于 $x$ 的门控值（Sigmoid）。当 $x$ 很大时，门控打开（接近1）；当 $x$ 为负且值较大时，门控关闭（接近0）。
+- **非单调性 (Non-monotonicity)：** 与 ReLU 不同，Swish 在 $x < 0$ 的区域有一段平滑的“凹槽”。这意味着即使输入是微小的负值，信息也不会被完全截断，这有助于深层网络中的梯度流动。
+- **平滑性：** 它是全域可微的，这使得优化器的表面更加平滑，有助于模型收敛。
+- **“死区”问题：** 对于ReLU来说，任何 $x < 0$，$\frac{df}{dx} = 0$。对于 Swish 来说，只要 $x$ 不是负无穷，它的梯度就**永远不会绝对等于 0**。
+
+$f'(x) = \sigma(x) + x \cdot \sigma(x)(1 - \sigma(x)) = \text{Swish}(x) + \sigma(x)(1 - \text{Swish}(x))$
+
+# GLU (Gated Linear Unit)
+
+GLU（门控线性单元）最早出现在卷积神经网络处理语言任务的研究中，它引入了更显式的“门”概念。
+**数学公式**
+对于输入变量 $x$，GLU 将其通过两个不同的线性变换（矩阵 $W$ 和 $V$），然后进行逐元素相乘：
+
+$$
+GLU(x, W, V, b, c) = \sigma(xW + b) \otimes (xV + c)
+$$
+
+其中 $\sigma$ 是 Sigmoid 函数，$\otimes$ 是逐元素乘积（Hadamard product）。
+
+**优势：**
+- **选择性信息传递：** $xV + c$ 是主要的信息载体，而 $\sigma(xW + b)$ 则充当“动态门控”。模型可以根据当前的输入内容，自主决定让多少信息通过。
+- **梯度消失缓解：** 相比于纯粹的 Sigmoid 激活，GLU 的一部分是线性的（即 $xV+c$ 部分），这在很大程度上缓解了深层网络中的梯度消失问题，因为它提供了一条线性的路径。
+
+$\frac{dy}{dx} = \sigma'(xW)W \cdot (xV) + \sigma(xW) \cdot V$
+
+已知$\sigma’ < 0.25$，但后面这一项，如果门控打开（即 $\sigma(xW) \approx 1$），那么这一块的导数就近似等于 **$V$**。只要权重矩阵 $V$ 的谱半径（Spectral Radius）维持在 1 附近，梯度就可以几乎**毫无损耗地**流过这一层，而不会被 $\sigma'$ 的 0.25 魔咒强行截断。
+
+# SwiGLU
+
+SwiGLU 是由 Noam Shazeer 在 2020 年提出的（论文 *GLU Variants Improve Transformer*）。它是 Swish 和 GLU 的结合体，目前是 **Qwen**、**Llama 2/3、Gemma、Mistral** 等主流大模型的标配。
+
+SwiGLU 是 GLU 的变体，它将 Sigmoid 替换为了 Swish，并通常去掉了偏置项：
+
+$$
+SwiGLU(x, W, V) = Swish_1(xW) \otimes (xV)
+$$
+
+在模型实现中，它通常用于 FFN（前馈网络）层。
+
+**优势：**
+- **性能之王：** 研究表明，SwiGLU 在几乎所有 Transformer 任务中都优于 ReLU、GELU 和原始 GLU。
+- **更强的表达能力：** 它结合了 Swish 的非单调平滑特性和 GLU 的门控乘法结构。通过两个矩阵 $W$ 和 $V$ 的交互，模型能够学习到比单一激活函数更复杂的特征变换。
+- **计算开销与增益：** 相比于 ReLU，SwiGLU 增加了参数量（需要两个权重矩阵），但它带来的模型精度提升通常远超其计算成本的增加，因此成为现代 LLM 的首选。
+
+**用法介绍**
+普通的 **FFN** 架构如下：
+```
+x (d_model)
+   ↓ 线性层 W1 (d→d_ff)  【第1次变换：升维】
+h (d_ff)
+   ↓ 激活函数 ReLU/GELU  【无参数】
+   ↓ 线性层 W2 (d_ff→d)  【第2次变换：降维】
+out (d_model)
+```
+**SwiGLU** 架构如下：
+```
+                    x (d_model)
+                   /           \
+                  /             \
+    线性层 W_gate (d→d_ff)   线性层 W_up (d→d_ff)
+          ↓                       ↓
+       SiLU(·)                    ·
+          \                      /
+           \                    /
+            逐元素相乘 (⊙)
+                     ↓
+          线性层 W_down (d_ff→d)  【降维】
+                     ↓
+                    out
+```
