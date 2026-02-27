@@ -155,10 +155,9 @@ Qwen的自注意力层是GQA（Grouped Query Attention）的架构，Key 和 Val
 
 **第三步：广播与点积**
 
-KV广播到$(B, 16, L, 128)$，并与Q进行计算
-
+8 个 $KV$ 组被广播（Broadcast）以匹配 16 个 $Q$ 头。计算 $\text{Softmax}(\frac{QK^T}{\sqrt{d_k}})V$ 后，我们得到每个头独立计算的结果：
 $$
-(B, 16, L, 128) \xrightarrow{permute} (B, L, 16, 128) \xrightarrow{reshape} \mathbf{(B, L, 2048)}
+\text{Attention Output}: (B, 16, L, 128) \xrightarrow{permute} (B, L, 16, 128)
 $$
 
 **第四步：合并与输出投影（Concat & Output Projection）**
@@ -166,7 +165,7 @@ $$
 **还原形状**:
 
 $$
-(B, 16, L, 128) \xrightarrow{permute} (B, L, 16, 128) \xrightarrow{reshape} \mathbf{(B, L, 2048)}
+O_{reshaped} = (B, L, 16, 128) \xrightarrow{reshape} \mathbf{(B, L, 2048)}
 $$
 
 **输出投影 ($W_O$)**:
