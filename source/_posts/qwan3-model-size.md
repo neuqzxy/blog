@@ -210,3 +210,67 @@ RMSNorm 的参数量极小，每层 2 个，称之为Pre-Norm（前置归一化�
 
 总共28层：$(6291456 + 9437184 + 2048) \times 28 = 440459264$
 约为0.44B
+
+## 所需显存大小
+
+### 推理显存
+
+推理所需显存主要包含以下几块：
+
+| 组成部分 | 说明 | 是否随序列长度变化 |
+|---------|------|-------------------|
+| **模型权重** | 模型加载到显存中的参数，与 batch、seq 无关 | 否 |
+| **KV Cache** | 自回归解码时每层缓存的 K、V，用于避免重复计算 | 是（∝ seq_len × batch） |
+| **激活值** | 前向传播时的中间激活，prefill 阶段较大，decode 每步很小 | 是（prefill 大，decode 小） |
+| **框架/上下文** | CUDA 上下文、kernel 等，通常几百 MB 量级 | 基本固定 |
+
+对 Qwen 这类 decoder-only 模型，推理时的大头是：**模型权重 + KV Cache**。激活在 decode 阶段只占一层，相对可忽略；prefill 时若 batch 或 seq 很大，激活会暂时变大。
+
+#### 模型权重显存
+
+$$
+M_{\text{weights}} = P \times b
+$$
+
+其中 $P$ 为模型参数量（个），$b$ 为每个参数的字节数（如 bfloat16 / float16 为 2，int8 为 1）。
+
+**Qwen3-0.6B**（bf16）：$0.6 \times 10^9 \times 2 \approx 1.2\text{GB}$  
+**Qwen3-1.7B**（bf16）：$1.7 \times 10^9 \times 2 \approx 3.4\text{GB}$
+
+#### KV Cache 显存
+
+自回归解码时，每层都要保存当前序列的 Key 和 Value，以便下一 token 的注意力计算复用。单层、单头、单 token 的 K 或 V 形状为 $(1, d_{head})$，整序列为 $(L, d_{head})$。
+
+总 KV Cache 显存（字节）可写为：
+
+$$
+M_{\text{kv}} = 2 \times n_{layers} \times n_{\text{heads_kv}} \times d_{head} \times L \times B \times b
+$$
+
+- $n_{layers}$：层数（num_hidden_layers）
+- $n_{\text{heads_kv}}$：KV 头数（num_key_value_heads）
+- $d_{head}$：头维度（head_dim）
+- $L$：当前序列长度（已生成 token 数 + 输入长度），与形状 $(B, L, d_{model})$ 中的 $L$ 一致
+- $B$：batch size
+- $b$：每元素字节数（如 bf16 取 2）
+- 前面的 $2$ 表示 K 和 V 各一份
+
+**Qwen3-0.6B 示例**：$n_{layers}=28$，$n_{\text{heads_kv}}=8$，$d_{head}=128$，$b=2$，$B=1$，$L=2048$：
+
+$$
+M_{\text{kv}} = 2 \times 28 \times 8 \times 128 \times 2048 \times 1 \times 2 \approx 224\text{MB}
+$$
+
+若 $L=32768$（满上下文），则 KV Cache 约 $3.6\text{GB}$。
+
+#### 推理显存粗估
+
+$$
+M_{\text{infer}} \approx M_{\text{weights}} + M_{\text{kv}} + M_{\text{overhead}}
+$$
+
+$M_{\text{overhead}}$ 为框架与临时张量等，通常预留 0.5–1 GB 即可。因此：
+
+- **Qwen3-0.6B**：$L=2048$、$B=1$ 时约 $1.2 + 0.22 + 0.5 \approx 2\text{GB}$。
+- **Qwen3-1.7B**：同样条件下，权重约 3.4 GB，KV 与 0.6B 同配置下相同（层数、KV 头、$d_{head}$ 一致），总显存约比 0.6B 多 2.2 GB 左右。
+
