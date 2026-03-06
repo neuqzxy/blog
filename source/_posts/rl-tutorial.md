@@ -57,13 +57,13 @@ $$
 智能体与环境交互产生一条**轨迹（Trajectory）**：
 
 $$
-\tau = (s_0,\ a_0,\ r_0,\ s_1,\ a_1,\ r_1,\ \ldots)
+\tau = (s_0,\ a_0,\ r_1,\ s_1,\ a_1,\ r_2,\ \ldots)
 $$
 
 从时刻 $t$ 起的**折扣累积回报（Return）** 定义为：
 
 $$
-G_t = \sum_{k=0}^{\infty} \gamma^k r_{t+k} = r_t + \gamma r_{t+1} + \gamma^2 r_{t+2} + \cdots
+G_t = \sum_{k=0}^{\infty} \gamma^k r_{t+k+1} = r_{t+1} + \gamma r_{t+2} + \gamma^2 r_{t+3} + \cdots
 $$
 
 $\gamma$ 的作用是双重的：数学上保证无限序列收敛（$\gamma < 1$）；语义上体现"近期奖励比远期更确定"的偏好。
@@ -184,10 +184,6 @@ $$
 J(θ) = \mathbb{E}_{\tau \sim \pi_θ}\left[G(\tau)\right] = \int p_θ(\tau) G(\tau) d\tau
 $$
 
-$$
-p_θ(\tau) = \pi_{θ}(a \mid s)
-$$
-
 **Policy Gradient 定理** 给出梯度的解析形式：
 
 $$
@@ -225,13 +221,13 @@ $$
 \nabla_θ J(θ) = \mathbb{E}_{\pi_θ}\left[\nabla_θ \log \pi_θ(a_t \mid s_t) \cdot A^{\pi}(s_t, a_t)\right]
 $$
 
-实践中 $A$ 用 **TD 误差**近似：$A \approx \delta_t = r_t + \gamma V_\phi(s_{t+1}) - V_\phi(s_t)$，**Critic** 同步用 **TD 误差**更新 $V_\phi$。
+实践中 $A$ 用 **TD 误差**近似：$A \approx \delta_t = r_{t+1} + \gamma V_\phi(s_{t+1}) - V_\phi(s_t)$，**Critic** 同步用 **TD 误差**更新 $V_\phi$。
 
 **PPO（Proximal Policy Optimization）** 是 **Actor-Critic** 的主流变体，通过 Clip 机制限制每次策略更新的幅度，兼顾稳定性与效率：
 
-$$\mathcal{L}^{\text{CLIP}}(θ) = \mathbb{E}\left[\min\left(r_t(θ)\, A_t,\ \text{clip}(r_t(θ), 1-\epsilon, 1+\epsilon)\, A_t\right)\right]$$
+$$\mathcal{L}^{\text{CLIP}}(θ) = \mathbb{E}\left[\min\left(\rho_t(θ)\, A_t,\ \text{clip}(\rho_t(θ), 1-\epsilon, 1+\epsilon)\, A_t\right)\right]$$
 
-其中 $r_t(θ) = \dfrac{\pi_θ(a_t \mid s_t)}{\pi_{θ_{\text{old}}}(a_t \mid s_t)}$ 为新旧策略的概率比。
+其中 $\rho_t(θ) = \dfrac{\pi_θ(a_t \mid s_t)}{\pi_{θ_{\text{old}}}(a_t \mid s_t)}$ 为新旧策略的概率比。
 
 ---
 
@@ -245,7 +241,7 @@ $$\hat{P}(s' \mid s, a) \approx P(s' \mid s, a), \qquad \hat{R}(s, a) \approx R(
 
 #### 模型学习
 
-用真实交互收集到的数据 $\{(s_t, a_t, r_t, s_{t+1})\}$，以监督学习的方式训练模型：
+用真实交互收集到的数据 $\{(s_t, a_t, r_{t+1}, s_{t+1})\}$，以监督学习的方式训练模型：
 
 $$\mathcal{L}_P = \mathbb{E}\left[\|\hat{P}(s, a) - s'\|^2\right], \qquad \mathcal{L}_R = \mathbb{E}\left[(\hat{R}(s, a) - r)^2\right]$$
 
