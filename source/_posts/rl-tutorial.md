@@ -1,5 +1,5 @@
 ---
-title: WIP 强化学习
+title: 强化学习
 date: 2026-03-04 23:22:36
 tags:
   - Math
@@ -86,7 +86,7 @@ $$Q^{\pi}(s, a) = \mathbb{E}_{\pi}\left[G_t \mid s_t = s,\ a_t = a\right]$$
 在策略 $\pi$ 下，**状态价值函数** 定义为从状态 $s$ 出发的期望累积回报：
 
 $$
-V^{\pi}(s) = \sum_{a} \pi(a \mid s)\, Q^{\pi}(s, a)
+V^{\pi}(s) = \sum_{a} \pi(a \mid s) Q^{\pi}(s, a)
 $$
 
 ### Bellman 方程
@@ -115,7 +115,7 @@ $$
 Q^{\*}(s, a) = \sum_{s'} P(s' \mid s, a)\left[R(s,a,s') + \gamma \max_{a'} Q^{*}(s', a')\right]
 $$
 
-最优策略可直接从 $Q^{\*}$ 中贪心提取：$\pi^{\*}(s) = \arg \max_{a}\, Q^{\*}(s, a)$
+最优策略可直接从 $Q^{\*}$ 中贪心提取：$\pi^{\*}(s) = \arg \max_{a} Q^{\*}(s, a)$
 
 ---
 
@@ -225,7 +225,7 @@ $$
 
 **PPO（Proximal Policy Optimization）** 是 **Actor-Critic** 的主流变体，通过 Clip 机制限制每次策略更新的幅度，兼顾稳定性与效率：
 
-$$\mathcal{L}^{\text{CLIP}}(θ) = \mathbb{E}\left[\min\left(\rho_t(θ)\, A_t,\ \text{clip}(\rho_t(θ), 1-\epsilon, 1+\epsilon)\, A_t\right)\right]$$
+$$\mathcal{L}^{\text{CLIP}}(θ) = \mathbb{E}\left[\min\left(\rho_t(θ) A_t,\ \text{clip}(\rho_t(θ), 1-\epsilon, 1+\epsilon) A_t\right)\right]$$
 
 其中 $\rho_t(θ) = \dfrac{\pi_θ(a_t \mid s_t)}{\pi_{θ_{\text{old}}}(a_t \mid s_t)}$ 为新旧策略的概率比。
 
@@ -280,3 +280,62 @@ $$\text{第}\ k\ \text{步误差} \sim O(\epsilon^k)$$
 | 动作空间 | 离散为主 | 离散 + 连续 | 均可 |
 | 样本效率 | 中（可回放） | 低 | 高 |
 | 代表算法 | DQN, Rainbow | PPO, TRPO | Dyna, MuZero |
+
+## 核心矛盾：探索（Exploration）与利用（Exploitation）
+
+这是 RL 区别于监督学习的灵魂。在监督学习中，数据集是给定的；在 RL 中，数据集是智能体自己“跑”出来的。
+
+- 利用（Exploitation）：根据当前已知信息，选择回报最高的动作（类似“吃最熟悉的餐馆”）。
+- 探索（Exploration）：尝试未知的动作，寻找潜在更高的回报（类似“打卡新开的餐馆”）。
+
+**常见策略**
+
+**① $\epsilon$-greedy**：先确定当前最优动作：
+
+$$
+a^* = \arg\max_{a \in \mathcal{A}} Q(s_t, a)
+$$
+
+再以如下概率分布选择实际执行的动作：
+
+$$
+\pi_\epsilon(a \mid s_t) = \begin{cases} 1 - \epsilon + \dfrac{\epsilon}{|\mathcal{A}|} & a = a^* \\\\
+\dfrac{\epsilon}{|\mathcal{A}|} & a \neq a^* \end{cases}
+$$
+
+即以概率 $1-\epsilon$ 选最优动作，以概率 $\epsilon$ 在全部 $|\mathcal{A}|$ 个动作上均匀随机（含 $a^*$ 自身，所以最优动作的总概率略高于 $1-\epsilon$）。
+
+训练过程中通常让 $\epsilon$ 随时间衰减（从接近 1 逐渐降到接近 0），前期大量探索，后期充分利用。
+
+**② 熵正则化（Entropy Regularization）**：将策略熵（就是信息熵） $H(\pi)$ 加入优化目标，鼓励策略输出更均匀的概率分布，防止过早收敛到局部最优：
+
+$$
+J_{\text{ent}}(θ) = \mathbb{E}_{\pi_θ}\left[G_t\right] + \alpha H(\pi_θ(\cdot \mid s_t))
+$$
+
+其中策略熵定义为：
+
+$$
+H(\pi(\cdot \mid s)) = -\sum_{a} \pi(a \mid s) \log \pi(a \mid s)
+$$
+
+$\alpha$ 为熵系数，控制探索强度。$H$ 越大说明策略越"均匀"、越倾向探索；当某个动作的概率趋近 1 时，$H \to 0$，探索消失。SAC（Soft Actor-Critic）将熵正则化纳入 MDP 目标本身，PPO 实现中也常在损失中加入熵奖励项。
+
+**③ UCB（Upper Confidence Bound）**：对置信区间上界进行乐观估计，优先探索"不确定性高"的动作，兼顾探索与利用：
+
+$$
+a_t = \arg\max_{a}\left[Q(s_t, a) + c\sqrt{\frac{\ln N_t}{N_t(a)}}\right]
+$$
+
+**已知收益 + 探索奖励**。其中 $N_t$ 为总步数，$N_t(a)$ 为动作 $a$ 被选择的次数，$c$ 控制探索系数。UCB 给每个动作附加一个"置信上界"奖励——选得越少、置信上界越高，从而系统性地驱动智能体探索被忽视的动作。
+
+## LLM对齐算法演进
+
+- **PPO (2022–2023)**：RLHF 时代的标杆算法，也是 ChatGPT 对齐的核心方案。采用经典 Actor-Critic 结构，需要同时维护Actor、Critic、Reward Model、Reference Model四个模型，训练流程复杂、显存占用极高，难以在超大规模模型上稳定落地。
+
+- **DPO (2023–2024)**：直接基于偏好数据做对偶偏好优化，跳过显式 Reward Model 训练，将强化学习转化为简单的分类式损失，大幅简化流程、降低训练门槛，成为开源社区最主流的对齐范式。后续衍生出 IPO、KTO、ORPO 等一系列直接偏好优化类方法，统一了 “免 RM、免 Critic” 的简洁训练路线。
+
+- **GRPO (2025, DeepSeek)**：在 DPO/IPO 等基础上，重新引入在线采样与策略优化，但彻底去掉 Critic 网络，通过同 prompt 多回复分组 + 组内相对奖励来估计优势函数，实现了真正轻量化的 RL。相比 PPO，显存占用大幅下降，训练稳定性与效率显著提升，让超大模型的在线强化学习重新变得可行，成为 2025–2026 年工业界对齐的重要基线。
+
+- **GDPO / HVO / DenseGRPO 等(2026)**：在 GRPO 的组内相对优化框架上进一步演进，针对多目标奖励、长推理链、稠密反馈、多智能体等场景做专门改进，实现更稳定、更高质量、更可控的对齐，成为当前 SOTA 级对齐路线。
+
