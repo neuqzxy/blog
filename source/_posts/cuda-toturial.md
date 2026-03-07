@@ -1,5 +1,5 @@
 ---
-title: WIP CUDA 编程入门：线程层次与索引
+title: CUDA 编程入门
 date: 2026-03-01 18:37:23
 tags:
   - CUDA
@@ -9,7 +9,7 @@ tags:
 categories:
   - ML
 ---
-# CUDA 编程入门：线程层次与索引
+# 线程层次与索引
 
 ## 1. 线程层次结构
 
@@ -114,3 +114,184 @@ block idx: (  0,   1,   1), thread idx in block:   4, coord: (  2,   5)
 block idx: (  0,   1,   1), thread idx in block:   5, coord: (  3,   5)
 */
 ```
+
+# 矩阵计算
+
+对于 $\mathbb{R}^{m \times n}$ 和 $\mathbb{R}^{n \times k}$ 的矩阵乘法，大约需要 $m \cdot k \cdot n$ 个乘加运算，在CPU中，我们通常通过两层大循环( $ m \times n $ )，内部再加一个n次乘加的小循环，计算出 $\mathbb{R}^{m \times k}$ 的output
+
+```c++
+// width维方阵乘法（CPU）
+void matMulOnHost(const float* matM, const float* matN, float* matP, int width) {
+	for (int i = 0; i < width; ++i) {
+		for (int j = 0; j < width; ++j) {
+			float sum = 0;
+			for (int k = 0; k < width; ++k) {
+				sum += matM[i * width + k] * matN[k * width + j];
+			}
+			matP[i * width + j] = sum;
+		}
+	}
+}
+```
+
+使用CUDA并发编程，就可以创建 $m \cdot k$ 个threads来并行处理，每个threads中完成一个n次乘加得到output矩阵中的一个cell
+
+```c++
+// width维方阵乘法（GPU）
+__global__ void matMulKernel(const float* matM, const float* matN, float* matP, int width) {
+	int row = blockIdx.y * blockDim.y + threadIdx.y;
+	int col = blockIdx.x * blockDim.x + threadIdx.x;
+	
+	float value = 0;
+	for (int k = 0; k < width; ++k) {
+		value += matM[row * width + k] * matN[k * width + col];
+	}
+	matP[row * width + col] = value;
+}
+
+void matMulOnDevice(const float* matM, const float* matN, float* matP, int width, unsigned int blockSize) {
+	int size = width * width * sizeof(float);
+
+	float *m_device;
+	float *n_device;
+	float *p_device;
+
+	// 在GPU上分配内存
+	cudaMalloc(&m_device, size);
+	cudaMalloc(&n_device, size);
+	cudaMalloc(&p_device, size);
+
+	// 将数据从CPU复制到GPU
+	cudaMemcpy(m_device, matM, size, cudaMemcpyKind::cudaMemcpyHostToDevice);
+	cudaMemcpy(n_device, matN, size, cudaMemcpyKind::cudaMemcpyHostToDevice);
+
+	dim3 dimBlock(blockSize, blockSize);
+	dim3 dimGrid(width / dimBlock.x, width / dimBlock.y);
+
+	// 在GPU上执行矩阵乘法
+	matMulKernel <<<dimGrid, dimBlock>>>(m_device, n_device, p_device, width);
+
+	// 将结果从GPU复制回CPU
+	cudaMemcpy(matP, p_device, size, cudaMemcpyKind::cudaMemcpyDeviceToHost);
+	cudaDeviceSynchronize();
+
+	// 释放GPU内存
+	cudaFree(p_device);
+	cudaFree(n_device);
+	cudaFree(m_device);
+}
+```
+
+## Block与Warp调度
+
+由于 GPU 硬件架构的限制，每个 block 的最大线程数不能超过 1024（绝大多数现代 CUDA 设备）。GPU 会将一个 block 内的线程按照Warp（线程束） 为基本单元拆分和调度，每个 Warp 固定包含 32 个连续的线程 —— 这是 CUDA 硬件层面的核心设计，目的是在调度效率和执行性能之间达到最优平衡：
+
+1. **调度层面**：GPU 的 SM（流多处理器）不以单个线程为调度单位，而是以 Warp 为最小调度单元。相比调度单个线程，调度 32 线程的 Warp 能大幅降低调度开销（比如减少指令分发、上下文切换的成本）；
+2. **执行层面**：一个 Warp 内的 32 个线程会同步执行相同的指令（SIMT 架构） —— 并非简单的 “并行执行”，而是 “单指令多线程”：同一个 Warp 内的所有线程在同一时钟周期执行同一条指令，只是处理不同的数据；
+3. **访存优化层面**：当某个 Warp 中的线程需要访存（比如从全局内存读取数据）时，访存操作会有延迟（几十到几百个时钟周期）。此时 GPU 会将这个等待访存的 Warp挂起，并调度同一个 SM 上的其他就绪 Warp 执行，直到原 Warp 的访存完成。这种 “延迟隐藏” 机制能让 SM 的计算核心始终处于忙碌状态，最大化 GPU 的利用率。
+
+一个Block不允许运行在多个SM中，但是一个SM允许运行多个Block，但会有一个**最大 Block 驻留数量（Max Blocks per SM）**，否则Block和Warp的界限就不明确了
+
+**按 Compute Capability 区分的 GPU 规格：**
+
+| 规格项 | 7.5 | 8.0 | 8.6 | 8.7 | 8.9 | 9.0 | 10.0 | 10.3 | 11.0 | 12.x |
+|--------|-----|-----|-----|-----|-----|-----|------|------|------|------|
+| Ratio of FP32 to FP64 Throughput [2] | 32:1 | 2:1 | 64:1 | 2:1 | 64:1 | — | — | — | — | — |
+| Maximum number of resident blocks per SM | 16 | 32 | 16 | 24 | 32 | 24 | — | — | — | — |
+| Maximum number of resident Warps per SM | 32 | 64 | 48 | 64 | 48 | — | — | — | — | — |
+| Maximum number of resident threads per SM | 1024 | 2048 | 1536 | 2048 | 1536 | — | — | — | — | — |
+| Green contexts: minimum SM partition size (useFlags 0) | 2 | 4 | 8 | — | — | — | — | — | — | — |
+| Green contexts: SM co-scheduled alignment per partition (useFlags 0) | 2 | 8 | — | — | — | — | — | — | — | — |
+
+**所有 Compute Capability 通用规格：**
+
+| 规格项 | 值 |
+|--------|-----|
+| Maximum number of resident grids per device (Concurrent Kernel Execution) | 128 |
+| Maximum dimensionality of a grid | 3 |
+| Maximum x-dimension of a grid | 2³¹-1 |
+| Maximum y- or z-dimension of a grid | 65535 |
+| Maximum dimensionality of a thread block | 3 |
+| Maximum x- or y-dimensionality of a thread block | 1024 |
+| Maximum z-dimension of a thread block | 64 |
+| Maximum number of threads per block | 1024 |
+| Warp size | 32 |
+
+```c++
+void printCudaInfo() {
+	int deviceId;
+	cudaGetDevice(&deviceId); // 获取当前使用的GPU设备ID
+
+	cudaDeviceProp prop;
+	cudaGetDeviceProperties(&prop, deviceId); // 获取设备属性
+
+	std::cout << "=== GPU设备属性 ===" << std::endl;
+    std::cout << "GPU名称: " << prop.name << std::endl;
+    std::cout << "Compute Capability: " << prop.major << "." << prop.minor << std::endl;
+    std::cout << "每个Warp的线程数 (WarpSize): " << prop.WarpSize << std::endl; // 关键字段
+    std::cout << "每个SM的最大线程数: " << prop.maxThreadsPerMultiProcessor << std::endl;
+    std::cout << "SM数量: " << prop.multiProcessorCount << std::endl;
+    std::cout << "每个block最大线程数: " << prop.maxThreadsPerBlock << std::endl;
+    std::cout << "各维度最大线程数限制：" << std::endl;
+    std::cout << "  x维度: " << prop.maxThreadsDim[0] << std::endl;
+    std::cout << "  y维度: " << prop.maxThreadsDim[1] << std::endl;
+    std::cout << "  z维度: " << prop.maxThreadsDim[2] << std::endl;
+}
+
+// === GPU设备属性 ===
+// GPU名称: NVIDIA GeForce RTX 5090 D v2
+// Compute Capability: 12.0
+// 每个Warp的线程数 (WarpSize): 32
+// 每个SM的最大线程数: 1536
+// SM数量: 170
+// 每个block最大线程数: 1024
+// 各维度最大线程数限制：
+//   x维度: 1024
+//   y维度: 1024
+//   z维度: 64
+```
+
+## blockDim取值
+
+SM 能够同时 **驻留（Resident）多个 Warp，这些 Warp 共享 SM 的寄存器和 Shared Memory 资源。虽然硬件为每个 Warp 预留了 32 个物理线程的执行通道，但由于 SIMT（单指令多线程） 的执行特性，硬件利用率取决于 Warp 内活跃线程（Active Threads）** 的数量。
+当某个正在执行的 Warp 因为长延迟操作（如 Global Memory 访存）被挂起时，SM 的调度器会从池子里挑选另一个就绪（Ready）的 Warp 填补指令发射空隙。因此，通过合理的线程块（Block）配置来保证足够的 Warp 驻留量和 Warp 满载率，是实现延迟隐藏（Latency Hiding）、提升吞吐量的关键。”
+
+> 我们考虑两种计算 $\mathbb{R}^{1024 \times 1024}$ 方阵乘法方案的例子🌰：
+- **方案A**: 如果blockDim为1，那就是会有 $1024 \times 1024$ 个block，每个block有1个Warp，这个Warp中有1个threads，其他31个threads在空跑
+
+对于方案A，每个SM最多分配 $1536 / 1 = 1536$ 个block，但由于**最大 Block 驻留数量（Max Blocks per SM）**的限制，每个 SM 最多只能同时驻留 24 个 Block（12.x的Compute Capability）。理论最多分配最多分配 $1536 / 32 = 48$ 个Warp，实际上则是 $\text{min}(48, 24) = 24$ 个Warp，同一时刻并行执行24个有效线程
+同时方案A还有一个问题，每个 Warp 只有一个活动线程。这意味着当 GPU 发出访存指令时，它为了取 1 个 float（4 bytes），可能也要触发一个完整的 Cache Line 加载。带宽浪费极其严重。
+
+- **方案B**：如果blockDim为32，那就是会有 $1024$ 个block，每个block有32个Warp，每个Warp中有32个threads
+
+对于方案B，每个SM最多分配 $1536 / 1024 = 1$ 个block，最多分配 $1024 / 32 = 32$ 个Warp（每个Warp里有32个有效线程），同一时刻并行执行1024个有效线程
+
+**更好的方案？**
+方案B看似跑满了block，但是实际上并没有跑满SM的总线程数量，**Occupancy（占用率）**为 $1024/1536 \approx 66.7\%$。
+**方案C**：如果设置blockDim为16，理论上会有那就是会有 $4096$ 个block，每个block有8个Warp，每个Warp中有32个threads
+对于方案C，每个SM最多分配 $1536 / 256 = 6$ 个block，每个block分配 $256 / 32 = 8$ 个Warp，SM最多分配 $6 \times 8 = 48$ 个Warp（每个Warp里有32个有效线程）
+
+| 特性 | 方案 A (blockDim=1) | 方案 B (blockDim=32x32) | 方案 C (blockDim=16x16) |
+|------|---------------------|-------------------------|-------------------------|
+| 线程分布/Block | 1 线程 | 1024 线程 | 256 线程 |
+| Warp 数/Block | 1 Warp | 32 Warps | 8 Warps |
+| SM 驻留 Block 数 | 24 (受限于 Max Blocks) | 1 (受限于 Max Threads) | 6 (完美契合) |
+| SM 驻留 Warp 数 | 24 | 32 | 48 |
+| 理论 Occupancy | 1.56% | 66.7% | 100% |
+| 延迟隐藏能力 | 极差 | 一般 | 优秀 |
+
+```text
+# blockDim = 32
+CPU uses: 4224.96 ms
+GPU warmup uses: 74.894 ms
+GPU uses: 1.9467 ms
+
+# blockDim = 1
+CPU uses: 4787.8 ms
+GPU warmup uses: 82.4443 ms
+GPU uses: 12.6243 ms
+```
+
+# 错误处理
+
+
