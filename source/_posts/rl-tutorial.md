@@ -187,7 +187,7 @@ $$
 **Policy Gradient 定理** 给出梯度的解析形式：
 
 $$
-\nabla_θ J(θ) = \mathbb{E}_{\pi_θ}\left[\nabla_θ \log \pi_θ(a_t \mid s_t) \cdot G_t\right]
+\nabla_θ J(θ) = \mathbb{E}_{s_t \sim ρ_θ \, a_t \sim \pi_θ}\left[\nabla_θ \log \pi_θ(a_t \mid s_t) \cdot G_t\right]
 $$
 
 直觉上：若轨迹回报 $G_t$ 高，就增大该动作的概率（$\log \pi_θ$ 梯度方向）；反之则压低。这是 **REINFORCE** 算法的核心。
@@ -195,7 +195,7 @@ $$
 实践中用**基线（Baseline）** 减少方差，常取状态价值函数 $b(s) = V(s)$：
 
 $$
-\nabla_θ J(θ) = \mathbb{E}_{\pi_θ}\left[\nabla_θ \log \pi_θ(a_t \mid s_t) \cdot \left(G_t - b(s_t)\right)\right]
+\nabla_θ J(θ) = \mathbb{E}_{s_t \sim ρ_θ \, a_t \sim \pi_θ}\left[\nabla_θ \log \pi_θ(a_t \mid s_t) \cdot \left(G_t - b(s_t)\right)\right]
 $$
 
 **特点**：天然支持**连续动作空间**；策略可直接表达随机性；但方差大、样本效率低。代表算法：REINFORCE、PPO、TRPO。
@@ -212,7 +212,7 @@ Value-Based 和 Policy-Based 的结合体，也是目前最主流的框架。
 引入**优势函数（Advantage Function）** 替代原始回报，进一步降低方差：
 
 $$
-A^{\pi}(s, a) = Q^{\pi}(s, a) - V^{\pi}(s)
+A^{\pi_θ}(s, a) = Q^{\pi_θ}(s, a) - V^{\pi_θ}(s)
 $$
 
 $A > 0$ 表示该动作比平均水平好，$A < 0$ 则相反。Actor 的梯度更新变为：
