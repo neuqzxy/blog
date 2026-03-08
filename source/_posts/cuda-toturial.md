@@ -292,6 +292,172 @@ GPU warmup uses: 82.4443 ms
 GPU uses: 12.6243 ms
 ```
 
-# 错误处理
+# 共享内存
 
+## 方案
 
+对于矩阵计算为例，假设两个 $\mathbb{R}^{4096 \times 4096}$ 维度的方阵相乘，生成的 $4096 \times 4096$ 维度矩阵中，每一个cell都需要 $4096 \times 2$ 次访存。总共需要 $ 4096 \times 4096 \times 4096 \times 2 $ 次访存。我们通过cudaMalloc分配内存，并在核函数中通过指针访问的时候，其实是访问的DRAM（global memory）属于片外内存（off-inch memory）。GPU中所有缓存的耗时可参考下图：
+
+![](/images/cuda_memory_list.jpg)
+
+所以需要再计算前，将一批数据缓存到shared memory中，Shared Memory 的大小并不是固定的，它取决于你的 GPU 架构，在矩阵乘法 $C = A \times B$ 中，我们通常切出 $\text{TILE_WIDTH} \times \text{TILE_WIDTH}$ 的小块。选择这个尺寸时，需要权衡以下三个核心因素：
+
+- **A. 必须是 Warp 的倍数**
+由于一个 Warp 是 32 个线程，你的线程块总数（Threads per Block）最好是 32 的倍数。$16 \times 16$： 256 个线程（8 个 Warp）。常用，平衡性好。$32 \times 32$： 1024 个线程（32 个 Warp）。这是单 Block 线程数的上限，性能通常最强，但会挤占资源。
+
+- **B. 内存占用的计算**
+假设你选 $32 \times 32$ 的 Tile，每个元素是 float（4 字节）：矩阵 A 的 Tile：$32 \times 32 \times 4 = 4$ KB矩阵 B 的 Tile：$32 \times 32 \times 4 = 4$ KB总计： 一个 Block 需要 8 KB 的 Shared Memory。对于 RTX 4090（128 KB/SM）来说，这远远不够塞满。看起来我们可以开更大的 Tile？不一定。
+
+- **C. 占用率（Occupancy）的博弈**
+GPU 的强大在于“并行掩盖延迟”。如果你把 Tile 设得非常大（比如耗尽了 128KB），那么一个 SM 同时只能运行 1 个 Block。如果这个 Block 因为某些原因阻塞了，SM 就没牌可换了，性能反而下降。黄金法则： 尽量让一个 SM 能同时跑 2~4 个 Blocks。这样当一个 Block 在搬运数据时，另一个 Block 可以在计算，实现流水线化。
+
+```text
+[核心计算单元]
+  设备名称:                   NVIDIA GeForce RTX 5090 D v2
+  计算能力:                   12.0
+  SM 数量:                    170
+  核心主频:                   2467 MHz
+  Warp 大小:                  32 threads
+
+[存储层级]
+  总显存容量:                 23.88 GB
+  L2 缓存大小:                96.00 MB
+  显存位宽:                   384 bit
+  理论峰值带宽:               1344.10 GB/s
+
+[SM 资源限制]
+  每个 SM 最大共享内存:       100.00 KB
+  每个 Block 最大共享内存:    48.00 KB
+  每个 SM 最大寄存器数:       65536
+  每个 Block 最大寄存器数:    65536
+  每个 SM 最大活跃线程:       1536
+  每个 SM 最大活跃 Block:     24
+```
+
+## 实现
+实现很简单，首先我们将需要计算的两个矩阵 $M$ 和 $N$ 拆分成 $\text{TILE_WIDTH} \times \text{TILE_WIDTH}$ 的小矩阵 $M_{tile}$ 和 $N_{tile}$，并且保障TILE_WIDTH是小于BLOCK_DIM的，这样每个线程刚好负责从 Global Memory 搬运 1 个 元素到 Shared Memory。然后将 $M_{tile}$ 和 $N_{tile}$ 的数据平均拆给每个线程去读写到shared memory中，等都读完之后就使用shared memory中的数据开始计算。
+
+**涉及到两次阻塞：**
+
+1. **第一次同步**： 在所有线程完成从 Global Memory 到 Shared Memory 的搬运后。
+
+	- 原因： 必须保证 Tile 里的所有数据都到位了，计算线程才能开始读，否则会读到旧数据。
+
+2. **第二次同步**： 在所有线程完成当前 Tile 的乘加计算后。
+
+	- 原因： 必须保证所有线程都用完了当前的 Shared Memory 数据，才能开始搬运下一个 Tile 的数据覆盖它，否则会把还没参与计算的数据给覆盖掉（Write-after-Read 冲突）。
+
+当然阻塞分别独立的发生在BLOCK中的，并不会产生跨BLOCK影响
+
+```c++
+#include <cuda_runtime.h>
+#include <cuda_runtime_api.h>
+#include <device_launch_parameters.h>
+#include "cuda_err.h"
+
+#define BLOCKSIZE 16
+
+extern void __syncthreads();
+
+__global__ void matMulStaticKernel(const float* matM, const float* matN, float* matP, int width) {
+	// 声明共享内存
+	__shared__ float M_deviceShared[BLOCKSIZE][BLOCKSIZE];
+	__shared__ float N_deviceShared[BLOCKSIZE][BLOCKSIZE];
+
+	// 计算当前线程在输出矩阵 P 中的行 (y) 和列 (x)
+	int x = blockIdx.x * BLOCKSIZE + threadIdx.x;
+	int y = blockIdx.y * BLOCKSIZE + threadIdx.y;
+
+	// 线程在块内的局部索引
+	int tx = threadIdx.x;
+	int ty = threadIdx.y;
+
+	float sum = 0.0f;
+	
+	for (int m = 0; m < width / BLOCKSIZE; m++) {
+		M_deviceShared[ty][tx] = matM[y * width + tx + m * BLOCKSIZE];
+		N_deviceShared[ty][tx] = matN[(ty + BLOCKSIZE * m) * width + x];
+
+		__syncthreads();
+
+		// 具体计算
+		for (int k = 0; k < BLOCKSIZE; k++) {
+			sum += M_deviceShared[ty][k] * N_deviceShared[k][tx];
+		}
+
+		__syncthreads();
+	}
+
+	matP[y * width + x] = sum;
+}
+
+__global__ void matMulDynamicKernel(const float* matM, const float* matN, float* matP, int width) {
+	// 动态共享变量必须是一维，而且只能声明一个
+	extern __shared__ float deviceShared[];
+	int stride = BLOCKSIZE * BLOCKSIZE;
+
+	int x = blockDim.x * blockIdx.x + threadIdx.x;
+	int y = blockDim.y * blockIdx.y + threadIdx.y;
+
+	int tx = threadIdx.x;
+	int ty = threadIdx.y;
+
+	float sum = 0.0f;
+
+	for (int m = 0; m < width / BLOCKSIZE; m++) {
+		// 将矩阵 M 和 N 的子块加载到共享内存中
+		deviceShared[ty * BLOCKSIZE + tx] = matM[y * width + tx + m * BLOCKSIZE];
+		deviceShared[stride + ty * BLOCKSIZE + tx] = matN[(BLOCKSIZE * m + ty) * width + x];
+
+		__syncthreads();
+
+		// 具体计算
+		for (int k = 0; k < BLOCKSIZE; k++) {
+			sum += deviceShared[ty * BLOCKSIZE + k] * deviceShared[stride + tx + BLOCKSIZE * k];
+		}
+
+		__syncthreads();
+	}
+
+	matP[y * width + x] = sum;
+}
+
+void matMulOnShareDevice(const float* matM, const float* matN, float* matP, int width, unsigned int blockSize, bool staticMem) {
+	int size = width * width * sizeof(float);
+
+	float* m_device;
+	float* n_device;
+	float* p_device;
+
+	// 在GPU上分配内存
+	CUDA_CHECK(cudaMalloc(&m_device, size));
+	CUDA_CHECK(cudaMalloc(&n_device, size));
+	CUDA_CHECK(cudaMalloc(&p_device, size));
+
+	// 将数据从CPU复制到GPU
+	CUDA_CHECK(cudaMemcpy(m_device, matM, size, cudaMemcpyKind::cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(n_device, matN, size, cudaMemcpyKind::cudaMemcpyHostToDevice));
+
+	dim3 dimBlock(blockSize, blockSize);
+	dim3 dimGrid(width / dimBlock.x, width / dimBlock.y);
+
+	// 在GPU上执行矩阵乘法
+	if (staticMem) {
+		matMulStaticKernel <<<dimGrid, dimBlock>>> (m_device, n_device, p_device, width);
+	} else {
+		size_t sharedMemSize = blockSize * blockSize * sizeof(float) * 2; // M 和 N 各占一个块
+		matMulDynamicKernel <<<dimGrid, dimBlock, sharedMemSize>>> (m_device, n_device, p_device, width);
+	}
+
+	CUDA_CHECK_KERNEL();
+
+	// 将结果从GPU复制回CPU
+	CUDA_CHECK(cudaMemcpy(matP, p_device, size, cudaMemcpyKind::cudaMemcpyDeviceToHost));
+	cudaDeviceSynchronize();
+
+	// 释放GPU内存
+	CUDA_CHECK(cudaFree(p_device));
+	CUDA_CHECK(cudaFree(n_device));
+	CUDA_CHECK(cudaFree(m_device));
+}
+```
