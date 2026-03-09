@@ -48,12 +48,12 @@ $$
 L^{CLIP}(θ) = \hat{\mathbb{E}}_t \left[ \min(r_t(θ) \hat{A}_t, \text{clip}(r_t(θ), 1-\epsilon, 1+\epsilon) \hat{A}_t) \right]
 $$
 
-| 优势 $\hat{A}_t$ | 动作表现 | 策略变化 $r_t$ | PPO 的态度 | 背后逻辑 |
-|------------------|----------|----------------|------------|----------|
-| >0 (好) | 优于平均 | 很大 (>1+ϵ) | 压制 (Clip) | 贪心是魔鬼，别让策略为了这一次高分就彻底跑偏。 |
-| >0 (好) | 优于平均 | 很小 (<1) | 不限制 | 既然是好动作，但新策略反而保守了，那就尽情往上涨。 |
-| <0 (差) | 低于平均 | 很大 (>1) | 猛拉 (Unclipped) | 这是严重错误！旧策略都知道这是坑，新策略居然还跳？必须通过大梯度拉回来。 |
-| <0 (差) | 低于平均 | 很小 (<1−ϵ) | 压制 (Clip) | 已经压得够低了，别再“鞭尸”了，否则会把这个动作的概率压成 0 导致失去探索能力。 |
+| 优势 $\hat{A}_t$ | 动作表现 | 策略变化 $r_t$ | PPO 的态度 |
+|------------------|----------|----------------|------------|
+| >0 (好) | 优于平均 | 很大 (>1+ϵ) | 压制 (Clip) |
+| >0 (好) | 优于平均 | 很小 (<1) | 不限制 |
+| <0 (差) | 低于平均 | 很大 (>1) | 猛拉 (Unclipped) |
+| <0 (差) | 低于平均 | 很小 (<1−ϵ) | 压制 (Clip) |
 
 ## 目标函数（The Total Loss）
 
@@ -72,9 +72,60 @@ $$
 
 - **熵奖励 (Entropy Bonus)**：即 $H$。这是为了鼓励探索。如果策略输出的概率分布太集中（比如只选某一个动作），熵就小。加上这一项能防止模型过早陷入局部最优解。
 
-# DPO
-> Llama 3系列（Meta）、Gemini 1.5系列（Google）、Qwen（通义千问）系列、GLM（智谱）系列
+# DPO (Direct Preference Optimization)
+> 它把强化学习问题变成了一个二元交叉熵 (Binary Cross Entropy) 问题，它让模型在看到问题 $x$ 时，最大化“好回答” $y_w$ 出现的概率，同时最小化“烂回答” $y_l$ 出现的概率。
+
+在 RLHF 中，我们的目标是最大化奖励并保留 KL 惩罚：
+
+$$
+\max_{\pi} \mathbb{E}_{s \sim D, a \sim \pi} [r(s, a)] - \beta \mathbb{D}_{KL} [\pi(a|s) || \pi_{ref}(a|s)]
+$$
+
+数学证明，满足这个目标的最优策略 $\pi_r$ 可以表示为：
+$$
+\pi_r(a|s) = \frac{1}{Z(s)} \pi_{ref}(a|s) \exp\left(\frac{1}{\beta} r(s, a)\right)
+$$
+
+其中 $Z(s)$ 是归一化常数（配分函数）。反过来，我们可以推导出奖励函数 $r(s, a)$ 如何由最优策略表达：
+$$
+r(s, a) = \beta \log \frac{\pi_r(a|s)}{\pi_{ref}(a|s)} + \beta \log Z(s)
+$$
+
+将这个 $r(s, a)$ 代入 **Bradley-Terry 偏好模型**（即人类认为动作 $a_w$ 优于 $a_l$ 的概率 $P(a_w \succ a_l | s) = \sigma(r(s, a_w) - r(s, a_l))$）。常数 $Z(s)$ 被抵消掉了，我们最终得到了：
+
+**DPO 损失函数**
+
+$$
+L_{DPO}(\pi_\theta; \pi_{ref}) = -\mathbb{E}_{(x, y_w, y_l) \sim D} \left[ \log \sigma \left( \beta \log \frac{\pi_\theta(y_w|x)}{\pi_{ref}(y_w|x)} - \beta \log \frac{\pi_\theta(y_l|x)}{\pi_{ref}(y_l|x)} \right) \right]
+$$
+
+- $y_w$：人类选出的好回答 (Winner)。
+- $y_l$：人类拒绝的烂回答 (Loser)。
+- $\beta$：一个超参数，控制对偏好的敏感度。
+
+**Bradley-Terry 偏好模型**
+如果我们有两个竞争者A和B，他们的实力参数分别为 $p(A)$ 和 $P(B)$ ，那么A击败B的概率可以表示为：
+
+$$
+P(A beats B) = \frac{p(A)}{p(A) + p(B)}
+$$
 
 # GRPO
+
+在标准 PPO 中，为了计算优势函数 $A(s, a)$，我们需要一个和 Actor 同样大的 Critic 网络 来估算 $V(s)$。多维护一个 Critic 模型意味着：
+- 显存翻倍：两个庞然大物并存，显存捉襟见肘。
+- 训练变慢：需要额外的计算资源来更新 Critic。
+- 价值估计难：在推理任务（如奥数、代码）中，状态 $s$ 到奖励 $r$ 的映射非常复杂，Critic 往往很难估准。
+
+GRPO中优势函数不依赖 $V(s)$，而是计算这组分数在当前组内的标准化分值：
+$$
+A_i = \frac{r_i - \text{mean}(r_1, \dots, r_G)}{\text{std}(r_1, \dots, r_G)}
+$$
+
+GRPO 损失函数就可以直接删掉critic那一项
+
+$$
+L_t(θ, \phi) = \hat{\mathbb{E}}_t \left[ -L_t^{CLIP}(θ) - c_2 H(s_t) \right]
+$$
 
 # GDPO
