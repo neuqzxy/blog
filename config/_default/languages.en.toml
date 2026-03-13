@@ -12,7 +12,7 @@ title = "欣仔的技术小屋"
 
 [params.author]
   name = "欣仔"
-  # image = "img/avatar.png"  # 放一张头像到 assets/img/avatar.png 后取消注释
+  image = "https://avatars.githubusercontent.com/u/26994055?v=4&size=64"  # 放一张头像到 assets/img/avatar.png 后取消注释
   headline = "分享技术，记录成长"
   bio = "专注于技术分享和经验总结，记录学习与成长的点滴。"
   links = [

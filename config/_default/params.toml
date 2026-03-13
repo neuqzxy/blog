@@ -50,9 +50,9 @@ fingerprintAlgorithm = "sha512" # Valid values are "sha512" (default), "sha384",
   showScrollToTop = true
 
 [homepage]
-  layout = "custom" # valid options: page, profile, hero, card, background, custom
-  # homepageImage = "/img/iceland.jpg" # used in: hero, and card
-  showRecent = false
+  layout = "page" # valid options: page, profile, hero, card, background, custom
+  homepageImage = "/img/iceland.jpg" # used in: hero, and card
+  showRecent = true
   showRecentItems = 12
   showMoreLink = true
   showMoreLinkDest = "posts"
@@ -62,8 +62,8 @@ fingerprintAlgorithm = "sha512" # Valid values are "sha512" (default), "sha384",
   disableHeroImageFilter = false # only used when layout equals hero
 
 [article]
-  showDate = false
-  showViews = true
+  showDate = true
+  showViews = false
   showLikes = false
   showDateOnlyInArticle = false
   showDateUpdated = false
@@ -75,7 +75,7 @@ fingerprintAlgorithm = "sha512" # Valid values are "sha512" (default), "sha384",
   layoutBackgroundHeaderSpace = true # only used when heroStyle equals background
   showBreadcrumbs = true
   showDraftLabel = true
-  showEdit = true
+  showEdit = false
   editURL = "https://github.com/neuqzxy/xinzai-blog/tree/main/content"
   editAppendPath = true
   seriesOpened = false
