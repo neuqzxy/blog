@@ -51,7 +51,7 @@ fingerprintAlgorithm = "sha512" # Valid values are "sha512" (default), "sha384",
 
 [homepage]
   layout = "custom" # valid options: page, profile, hero, card, background, custom
-  homepageImage = "/img/iceland.jpg" # used in: hero, and card
+  homepageImage = "/img/wallhaven-nm1vkk_1280x720.png" # used in: hero, and card
   showRecent = false
   showRecentItems = 6
   showMoreLink = true
