@@ -37,8 +37,8 @@ CUDA 提供以下内置变量用于线程定位：
 - **行主序（C/C++）**：`arr[x][y][z]` 的存储顺序为 x → y → z，即先变化 x，再 y，最后 z；
 - **列主序（CUDA）**：`dim3(x, y, z)` 的底层存储顺序为 z → y → x，按 z/y/x 顺序遍历可获得更好的访存效率（与硬件设计一致）。
 
-![](/images/cuda_idx_01.png)
-![](/images/cuda_idx_02.png)
+![](/img/cuda_idx_01.png)
+![](/img/cuda_idx_02.png)
 
 ## 3. 示例代码
 
@@ -298,7 +298,7 @@ GPU uses: 12.6243 ms
 
 对于矩阵计算为例，假设两个 $\mathbb{R}^{4096 \times 4096}$ 维度的方阵相乘，生成的 $4096 \times 4096$ 维度矩阵中，每一个cell都需要 $4096 \times 2$ 次访存。总共需要 $ 4096 \times 4096 \times 4096 \times 2 $ 次访存。我们通过cudaMalloc分配内存，并在核函数中通过指针访问的时候，其实是访问的DRAM（global memory）属于片外内存（off-inch memory）。GPU中所有缓存的耗时可参考下图：
 
-![](/images/cuda_memory_list.jpg)
+![](/img/cuda_memory_list.jpg)
 
 所以需要再计算前，将一批数据缓存到shared memory中，Shared Memory 的大小并不是固定的，它取决于你的 GPU 架构，在矩阵乘法 $C = A \times B$ 中，我们通常切出 $\text{TILE_WIDTH} \times \text{TILE_WIDTH}$ 的小块。选择这个尺寸时，需要权衡以下三个核心因素：
 

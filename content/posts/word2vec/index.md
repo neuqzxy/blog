@@ -12,7 +12,7 @@ categories:
 # Huffman树与Huffman编码(简略版)
 > Huffman树是一颗二叉树，其被用于生成Huffman编码
 
-![](/images/huffman.png)
+![](/img/huffman.png)
 
 ## Huffman树
 > 给定n个权值作为n个叶子节点，则带权路径最小的树称为Huffman树。
@@ -97,7 +97,7 @@ $$
 - **Distributed Representation**：每个词映射为固定长度的短向量。通过刻画两个向量之间的距离来刻画两个向量之间的相似度。
 
 ## NNLM 神经概率语言模型
-![](/images/word2vec_nn.png)
+![](/img/word2vec_nn.png)
 - **样本定义（Sample）**
 训练样本$(Context(w), w)$：$w$是语料C中的每一个词。
   - 前序上下文： 传统的语言模型逻辑中，$Context(w)$为取其前面$n-1$个词。
@@ -154,7 +154,7 @@ Word2vec 引入了两种结构：
 
 `Word2vec`同时也针对`NNLM`的性能问题进行了一系列优化
 
-![](/images/word2vec_w2v.png)
+![](/img/word2vec_w2v.png)
 ### 投影层优化
 Word2vec选择将输入层到投影层的运算从『拼接』变成『叠加』，投影层的输出维度大小从 $((n-1) \cdot m) \times 1$ 变成了 $m \times 1$
 

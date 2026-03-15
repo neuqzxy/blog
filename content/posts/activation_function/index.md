@@ -32,7 +32,7 @@ $$
 2. 添加激活函数：本质上是通过一个函数来扭曲坐标系。有很多不同的激活函数可选，下面详细介绍
 
 # Sigmoid
-![](/images/sigmoid.png)
+![](/img/sigmoid.png)
 Sigmoid 函数的图像看起来像一个 S 形曲线。函数表达式如下：
 $
 \sigma(z)=1/(1+e^{-z})
@@ -54,20 +54,20 @@ $$
 任意 $x_i \ge 0$ 导致所有参数只取决于 $\frac{\partial L}{\partial z}$ 同号，之字形收敛导致很慢
 
 # ReLU
-![](/images/relu.png)
+![](/img/relu.png)
 
 **缺点：**
 - Dead ReLU 问题。当输入为负时，ReLU 完全失效，在正向传播过程中，这不是问题。有些区域很敏感，有些则不敏感。但是在反向传播过程中，如果输入负数，则梯度将完全为零，Sigmoid 函数和 tanh 函数也具有类似的问题，但是梯度趋近于 0，被称之为饱和 (Saturation)。Sigmoid 是两端饱和，而 ReLU 是左侧完全硬饱和（梯度直接归零）。
 - 不是 **zero-centered**（不以 0 为中心）
 
 # Leaky ReLU
-![](/images/Leaky_ReLU.png)
+![](/img/Leaky_ReLU.png)
 
 与 ReLU 的不同之处在于负轴保留了非常小的常数leak，使得输入信息小于0时，信息没有完全丢掉，进行了相应的保留
 
 # Tanh
 
-![](/images/tanh.png)
+![](/img/tanh.png)
 
 tanh 激活函数的图像也是 S 形，表达式如下：
 
@@ -111,7 +111,7 @@ Softmax 激活函数的主要缺点是对输入敏感，易受极端值/异常�
 在 Transformer 等模型中，注意力分数计算后会除以 $\sqrt{d_k}$。这本质上也是为了防止 Softmax 的输入过大，导致输出分布过于“尖锐”（极端的 0 和 1），从而避开梯度消失区。
 
 # Swish (SiLU)
-![](/images/silu.png)
+![](/img/silu.png)
 Swish 是由 Google 在 2017 年提出的，后来在研究中发现 $\beta=1$ 时的 Swish（也称为 **SiLU**, Sigmoid Linear Unit）表现最为稳健。
 **数学公式**
 
