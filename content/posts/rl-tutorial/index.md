@@ -108,14 +108,14 @@ $$
 RL 的终极目标是找到**最优策略** $\pi^*$，使期望累积回报最大, 对应的最优价值函数满足 **Bellman 最优方程**：
 
 $$
-V^{\*}(s) = \max_{a} \sum_{s'} P(s' \mid s, a)\left[R(s,a,s') + \gamma V^{*}(s')\right]
+V^{*}(s) = \max_{a} \sum_{s'} P(s' \mid s, a)\left[R(s,a,s') + \gamma V^{*}(s')\right]
 $$
 
 $$
-Q^{\*}(s, a) = \sum_{s'} P(s' \mid s, a)\left[R(s,a,s') + \gamma \max_{a'} Q^{*}(s', a')\right]
+Q^{*}(s, a) = \sum_{s'} P(s' \mid s, a)\left[R(s,a,s') + \gamma \max_{a'} Q^{*}(s', a')\right]
 $$
 
-最优策略可直接从 $Q^{\*}$ 中贪心提取：$\pi^{\*}(s) = \arg \max_{a} Q^{\*}(s, a)$
+最优策略可直接从 $Q^{*}$ 中贪心提取：$\pi^{*}(s) = \arg \max_{a} Q^{*}(s, a)$
 
 ---
 
@@ -126,10 +126,10 @@ $$
 ### Value-Based（基于价值）
 > Value-Based 算法（以 Q-Learning/DQN/Rainbow 为代表的 Value-Based 方法属于 Off-policy），天然支持用离线数据训练；但Value-Based 家族同时包含 Sarsa 等 On-policy 算法。
 
-**核心思路**：不直接学习策略，而是学习最优动作价值函数 $Q^{\*}(s,a)$，策略由 $Q^{\*}$ 贪心导出（注意此时相当于执行 $\pi^{\*}$ 策略，该策略下动作不再随机，而是取最优路径，Q从期望退化成确定值）：
+**核心思路**：不直接学习策略，而是学习最优动作价值函数 $Q^{*}(s,a)$，策略由 $Q^{*}$ 贪心导出（注意此时相当于执行 $\pi^{*}$ 策略，该策略下动作不再随机，而是取最优路径，Q从期望退化成确定值）：
 
 $$
-\pi^*(s) = \arg\max_{a} Q^{\*}(s, a)
+\pi^*(s) = \arg\max_{a} Q^{*}(s, a)
 $$
 
 **求解方式**：对 Bellman 最优方程做迭代逼近。以最经典的 **Q-Learning** 为例，每次交互后对 $Q$ 表做 TD 更新：

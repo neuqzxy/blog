@@ -9,10 +9,10 @@ tags:
 categories:
   - ML
 ---
-# PPO
+## PPO
 > OpenAI的GPT-3.5、GPT-4，二者在RLHF阶段均主要采用PPO算法完成偏好对齐，是PPO在LLM领域应用的标杆，也是目前闭源大模型中对齐效果最稳定的案例。
 
-## GAE
+### GAE
 
 PPO基于Actor-Critic基础框架进行优化而来，同样包含`Actor`、`Critic`模型，传统的Actor-Critic会通过TD误差来近似奖励函数：
 
@@ -29,7 +29,7 @@ $$
 - $λ=0$：退化为单步 TD 误差（低方差、高偏差）
 - $λ=1$：退化为蒙特卡洛估计（低偏差、高方差）
 
-## 裁剪 & 重要性采样（ $L^{CLIP}$ ）
+### 裁剪 & 重要性采样（ $L^{CLIP}$ ）
 
 传统的策略梯度 (如 REINFORCE) 用策略 $\pi_θ$ 采样 $\rightarrow$ 计算梯度 $\rightarrow$ 更新 $θ$。而PPO基于训练速度的考量，希望使用离线数据并进行多次学习，针对这种诉求，传统的策略梯度方法就会非常不稳定。如果一次更新让策略 $\pi_θ$ 发生了剧烈变化，可能会导致模型陷入崩溃，无法恢复。
 PPO 的核心逻辑是：
@@ -55,7 +55,7 @@ $$
 | <0 (差) | 低于平均 | 很大 (>1) | 猛拉 (Unclipped) |
 | <0 (差) | 低于平均 | 很小 (<1−ϵ) | 压制 (Clip) |
 
-## 目标函数（The Total Loss）
+### 目标函数（The Total Loss）
 
 PPO的总损失函数是将三个目标合成一个 **Loss 最小化**：
 
@@ -72,7 +72,7 @@ $$
 
 - **熵奖励 (Entropy Bonus)**：即 $H$。这是为了鼓励探索。如果策略输出的概率分布太集中（比如只选某一个动作），熵就小。加上这一项能防止模型过早陷入局部最优解。
 
-# DPO (Direct Preference Optimization)
+## DPO (Direct Preference Optimization)
 > 它把强化学习问题变成了一个二元交叉熵 (Binary Cross Entropy) 问题，它让模型在看到问题 $x$ 时，最大化“好回答” $y_w$ 出现的概率，同时最小化“烂回答” $y_l$ 出现的概率。
 
 在 RLHF 中，我们的目标是最大化奖励并保留 KL 惩罚：
@@ -81,36 +81,94 @@ $$
 \max_{\pi} \mathbb{E}_{s \sim D, a \sim \pi} [r(s, a)] - \beta \mathbb{D}_{KL} [\pi(a|s) || \pi_{ref}(a|s)]
 $$
 
-数学证明，满足这个目标的最优策略 $\pi_r$ 可以表示为：
-$$
-\pi_r(a|s) = \frac{1}{Z(s)} \pi_{ref}(a|s) \exp\left(\frac{1}{\beta} r(s, a)\right)
-$$
-
-其中 $Z(s)$ 是归一化常数（配分函数）。反过来，我们可以推导出奖励函数 $r(s, a)$ 如何由最优策略表达：
-$$
-r(s, a) = \beta \log \frac{\pi_r(a|s)}{\pi_{ref}(a|s)} + \beta \log Z(s)
-$$
-
-将这个 $r(s, a)$ 代入 **Bradley-Terry 偏好模型**（即人类认为动作 $a_w$ 优于 $a_l$ 的概率 $P(a_w \succ a_l | s) = \sigma(r(s, a_w) - r(s, a_l))$）。常数 $Z(s)$ 被抵消掉了，我们最终得到了：
-
-**DPO 损失函数**
+### 公式展开
+我们展开这个式子，并推导
 
 $$
-L_{DPO}(\pi_\theta; \pi_{ref}) = -\mathbb{E}_{(x, y_w, y_l) \sim D} \left[ \log \sigma \left( \beta \log \frac{\pi_\theta(y_w|x)}{\pi_{ref}(y_w|x)} - \beta \log \frac{\pi_\theta(y_l|x)}{\pi_{ref}(y_l|x)} \right) \right]
+\begin{aligned}
+J(\pi) &= \max_{\pi} \sum_a \pi(a|s) r(s, a) - \beta \sum_a \pi(a|s) \log \frac{\pi(a|s)}{\pi_{ref}(a|s)}\\\\
+&= \max_{\pi} \beta \sum_a \pi(a|s) \left[ \frac{1}{\beta} r(s, a) - \log \frac{\pi(a|s)}{\pi_{ref}(a|s)} \right]\\\\
+&= \max_{\pi} \beta \sum_a \pi(a|s) \left[ \log e^{\left( \frac{1}{\beta} r(s, a) \right)} - \log \frac{\pi(a|s)}{\pi_{ref}(a|s)} \right]\\\\
+&= \max_{\pi} \beta \sum_a \pi(a|s) \log \left( \frac{\pi_{ref}(a|s) e^{\left( \frac{1}{\beta} r(s, a) \right)}}{\pi(a|s)} \right)\\\\
+&= \min_{\pi} \beta \sum_a \pi(a|s) \log \left( \frac{\pi(a|s)}{\pi_{ref}(a|s) e^{\left( \frac{1}{\beta} r(s, a) \right)}} \right)
+\end{aligned}
 $$
 
-- $y_w$：人类选出的好回答 (Winner)。
-- $y_l$：人类拒绝的烂回答 (Loser)。
-- $\beta$：一个超参数，控制对偏好的敏感度。
+我们发现 $\log \left( \frac{\pi(a|s)}{\pi_{ref}(a|s) e^{\left( \frac{1}{\beta} r(s, a) \right)}} \right)$ 的形式非常类似一个KL散度，如果我们能将分母改造成一个概率分布函数 $\pi^{*}$ 那么其最优解就是 $\pi = \pi^{*}$ 了
 
-**Bradley-Terry 偏好模型**
-如果我们有两个竞争者A和B，他们的实力参数分别为 $p(A)$ 和 $P(B)$ ，那么A击败B的概率可以表示为：
+### 引入配分函数 (Normalization Constant)
+
+为了让分母部分符合一个概率分布的形式，我们定义一个归一化常数（即配分函数）$Z(s)$ 使得其符合概率和为1的性质：
 
 $$
-P(A beats B) = \frac{p(A)}{p(A) + p(B)}
+Z(s) = \sum_a \pi_{ref}(a|s) \exp \left( \frac{1}{\beta} r(s, a) \right)
 $$
 
-# GRPO
+我们可以定义一个新的概率分布 $\pi^*(a|s)$：
+
+$$
+\pi^*(a|s) = \frac{1}{Z(s)} \pi_{ref}(a|s) \exp \left( \frac{1}{\beta} r(s, a) \right)
+$$
+
+将最新的分母表示 $\pi_{ref}(a|s) \exp \left( \frac{1}{\beta} r(s, a) \right) = Z(s) \pi^*(a|s)$ 带入原式，我们可以得到：
+
+$$
+\begin{aligned}
+J(\pi) &= \min_{\pi} \beta \sum_a \pi(a|s) \log \left( \frac{\pi(a|s)}{Z(s) \pi^*(a|s)} \right)\\\\
+&= \min_{\pi} \beta \sum_a \pi(a|s) \left[ \log \frac{\pi(a|s)}{\pi^*(a|s)} - \log Z(s) \right]\\\\
+&= \min_{\pi} -\beta \log Z(s) + \beta \sum_a \pi(a|s) \log \frac{\pi(a|s)}{\pi^*(a|s)}\\\\
+&= \min_{\pi} -\beta \log Z(s) + \beta \mathbb{D}_{KL}(\pi(a|s) || \pi^*(a|s))\\\\
+\end{aligned}
+$$
+
+其中第一项 $\beta \log Z(s)$ 与当前策略 $\pi$ 无关，所以我们只需要让 $\pi(a|s) = \pi^*(a|s)$ 即可，即最优策略 $\pi_r$ 为：
+
+$$
+\pi_r(a|s) = \frac{1}{Z(s)} \pi_{ref}(a|s) e^{\frac{1}{\beta} r(s, a)}
+$$
+
+依据该公式，可以反算出 $r(s, a)$ 以便于下面BT模型使用：
+
+$$
+r(s, a) = \beta \log \frac{\pi(a|s)}{\pi_{ref}(a|s)} + \beta \log Z(s)
+$$
+
+
+虽然我们推导出了最优策略 $\pi_r(a|s)$，但由于 $Z(s)$ 的积分/求和不可算，且 $r(s, a)$ 本身未知，这个公式在物理世界里是“悬在空中”的。
+但是BT模型巧妙的解决了这个问题，通过引入BT模型，我们可以：
+
+**1. 利用“相对值”消灭“绝对项” ($Z(s)$)：**
+
+根据 BT 模型，人类的偏好只取决于两个回复的奖励差值：$r(s, a_w) - r(s, a_l)$。当我们把推导出的 $r(s, a) = \beta \log \frac{\pi(a|s)}{\pi_{ref}(a|s)} + \beta \log Z(s)$ 代入差值时，同一个 Prompt 下的 $Z(s)$ 是完全一样的。在减法中，这个不可算的“幽灵项”被神奇地抵消了。
+
+**2. 将“奖励函数”映射为“策略概率”：**
+
+我们不再需要去苦苦寻找 $r(s, a)$ 的显式表达式。通过代换，我们将原本需要拟合奖励模型（Reward Model）的训练，转化成了直接拟合当前模型 $\pi_\theta$ 与参考模型 $\pi_{ref}$ 之间的对数概率比（Log Ratio）。
+
+### Bradley-Terry(BT) 模型与Loss
+Bradley-Terry 模型的核心就是给每个对象分配一个正的实力参数 $\alpha_i$​，然后用比值来定义 “i 比 j 强” 的概率：
+
+$$
+P(i > j) = \frac{\alpha_i}{\alpha_i + \alpha_j}
+$$
+
+我们正好有偏好数据：$(x,y_w​,y_l​)$ 表示 “在输入 $x$ 下，$y_w$​ 比 $y_l$​ 更优”：
+
+$$
+\begin{aligned}
+p^∗(y_w ​> y_l ​∣ x) &= \frac{r​(x,y_w​)​}{r​(x,y_w​) + r​(x,y_l​)}\\\\
+&= \sigma(r​(x,y_w​) - r​(x,y_l​))
+\end{aligned}
+$$
+
+我们发现，如果将之前算出来的 $r(s, a) = \beta \log \frac{\pi(a|s)}{\pi_{ref}(a|s)} + \beta \log Z(s)$ 带入到 $p^∗(a_w ​> a_l ​∣ s)$ 中，可以直接消去 $\log Z(s)$。而且Loss函数也是现成的，我们只需要最大化 $p^∗(a_w ​> a_l ​∣ s)$ 即可，也就是最大化对数似然（最小化负对数似然）：
+
+$$
+\mathcal{L}_{DPO}(\pi_\theta; \pi_{ref}) = -\mathbb{E}_{(x, y_w, y_l) \sim D} \left[ \log \sigma \left( \beta \log \frac{\pi_\theta(y_w|x)}{\pi_{ref}(y_w|x)} - \beta \log \frac{\pi_\theta(y_l|x)}{\pi_{ref}(y_l|x)} \right) \right]
+$$
+
+
+## GRPO
 
 在标准 PPO 中，为了计算优势函数 $A(s, a)$，我们需要一个和 Actor 同样大的 Critic 网络 来估算 $V(s)$。多维护一个 Critic 模型意味着：
 - 显存翻倍：两个庞然大物并存，显存捉襟见肘。
@@ -128,7 +186,7 @@ $$
 L_t(θ, \phi) = \hat{\mathbb{E}}_t \left[ -L_t^{CLIP}(θ) - c_2 H(s_t) \right]
 $$
 
-# GDPO
+## GDPO
 DPO 虽然优雅在实际应用中存在两个硬伤：
 - **Bradley-Terry (BT) 模型的局限性**：DPO 假设人类偏好严格遵循 $P(a_w \succ a_l) = \sigma(r_w - r_l)$。但在现实中，好的回答（$a_w$）可能只比坏的（$a_l$）好一点点，也可能好非常多。DPO 强制用一个固定的 Sigmoid 去拟合，会导致模型在 $a_w$ 和 $a_l$ 差距很小时也过度推高前者的概率。
 - **忽略了“边界” (The Margin Problem)**：DPO 只看谁更好，不看好多少。这导致模型可能会为了微小的奖励提升，不惜大幅偏离参考模型（Reference Model），产生严重的 KL 散度漂移。
