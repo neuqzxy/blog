@@ -104,20 +104,21 @@ $$
   - 滑动窗口：对于Word2vec 的 CBOW，$Context(w)$可指以 $w$ 为中心，左右各取 $k$ 个词。
 
 - **输入层（Input Layer）**
-> 维度大小： $(n-1) \times V$
+> 维度大小： $\mathbb{R}^{(n-1) \times V}$
 
 输入是上下文词的词向量，这些向量一般是 **one-hot** 编码（实际编码中不会真的用one-hot，而是用类似`torch.tensor([1])`，底层调用`gather`操作（张量查表），直接从 $W$ 中取出索引对应的行）或初始词向量，维度等于词汇表大小 $V$
 
 - **投影层（Projection Layer）**
-> 参数大小 $V \times m$；输出维度大小 $(n-1) \times m$
-> 拼接或聚合后：$((n-1) \cdot m) \times 1$ NNLM (拼接)；$m \times 1$ Word2vec CBOW (求和/平均)
+> 参数大小 $\mathbb{R}^{V \times m}$ ；输出维度大小 $\mathbb{R}^{(n-1) \times m}$
 
-投影层会将上下文词向量拼接（多用于 NNLM） 或 求和 / 平均（多用于 Word2vec），得到一个上下文聚合向量 $x_w$，长度为$ (n-1) \cdot m $ 或$ 1 \cdot m $，$m$即词向量长度
+> 拼接或聚合后：$\mathbb{R}^{((n-1) \cdot m) \times 1}$ NNLM (拼接)；$\mathbb{R}^{m \times 1}$ Word2vec CBOW (求和/平均)
+
+投影层会将上下文词向量拼接（多用于 NNLM） 或 求和 / 平均（多用于 Word2vec），得到一个上下文聚合向量 $\mathbf{x}_w$，长度为$ (n-1) \cdot m $ 或$ 1 \cdot m $，$m$即词向量长度
 
 输入层+投影层也被称之为**词嵌入层（embedding layer）**
 
 - **隐藏层（Hidden Layer）**
-> 输出维度大小 $d \times 1$
+> 输出维度大小 $\mathbb{R}^{d \times 1}$
 
 它是上下文信息的压缩表示，通过线性变换 $H \in \mathbb{R}^{d \times ((n-1) \cdot m)}$ 映射到低维稠密空间
 
@@ -126,12 +127,12 @@ Z_w = \tanh(H X_w + p)
 $$
 
 - **输出层（Output Layer）**
-> 输出维度大小 $V \times 1$
+> 输出维度大小 $\mathbb{R}^{V \times 1}$
 
 隐藏层 $z_w$​ 再通过另一个线性变换  $U \in \mathbb{R}^{V \times d}$ 映射到高纬空间，得到全词典的概率分布。
 
 $$
-y = U z_w + q
+y_w = U z_w + q
 $$
 
 $$
@@ -146,11 +147,13 @@ $$
 其中主要的计算集中在 **『隐藏层和输出层之间的矩阵运算』** 和 **『输出层上的Softmax』** 归一化运算。但是考虑到语言模型对语料库中的每一个词$w$都要进行训练，而语料库通常都有$10^6$以上的词数，因此上面的计算是无法忍受的，而Word2vec就是针对这两点来优化神经概率语言模型。
 
 ## Word2vec
-> Word2vec 最核心的改进逻辑只有四个字：**去繁就简**
+{{< alert "file-lines" >}}
+Word2vec 最核心的改进逻辑只有四个字：**去繁就简**
+{{< /alert >}}
 
 Word2vec 引入了两种结构：
-- CBOW (Continuous Bag of Words)：利用周围词预测中心词 $p(w|Context(w))$。CBOW 是将所有上下文向量相加（Sum），而 NNLM 拼接（Concat）保留了词序信息。Word2vec 舍弃词序（变为词袋模型）是为了换取极大的计算效率提升。这也是为什么它叫 "Bag of Words" 的原因。
-- Skip-gram：利用中心词预测周围词 $p(Context(w)|w)$。这在处理生僻词时表现更好，因为一个中心词会作为多个样本的输入被反复训练。
+- **CBOW (Continuous Bag of Words)**：利用周围词预测中心词 $p(w|Context(w))$。CBOW 是将所有上下文向量相加（Sum），而 NNLM 拼接（Concat）保留了词序信息。Word2vec 舍弃词序（变为词袋模型）是为了换取极大的计算效率提升。这也是为什么它叫 "Bag of Words" 的原因。
+- **Skip-gram**：利用中心词预测周围词 $p(Context(w)|w)$。这在处理生僻词时表现更好，因为一个中心词会作为多个样本的输入被反复训练。
 
 `Word2vec`同时也针对`NNLM`的性能问题进行了一系列优化
 
@@ -162,14 +165,15 @@ Word2vec选择将输入层到投影层的运算从『拼接』变成『叠加』
 隐藏层到输出层有两块耗时（矩阵乘法 + 非线性激活），Mikolov 认为，虽然深层结构能学到更复杂的逻辑，但对于生成高质量词向量来说，简单的线性关系已经足够捕获词汇间的语义相似度了。
 
 ### 输出层优化
-如果使用标准 `Softmax`，每次都要计算全词典 $V$ 个词的概率，复杂度是 $o(V)$。举个🌰，当使用Skip-gram算法时：
+如果使用标准 `Softmax`，每次输出层都要计算全词典 $V$ 个词的概率，复杂度是 $o(V)$。举个🌰，当使用Skip-gram算法时：
 1. 计算次数 = 语料大小 × 窗口大小 × 词表大小
 2. 假设语料有 $10^9$ 个词，窗口大小为 5，词表为 $10^5$。
 3. 如果用原始 Softmax，每一轮迭代要在输出层进行 $10^9 \times 5 \times 10^5 = 5 \times 10^{14}$ 次操作。
 
 #### 使用Hierarchical Softmax优化
-Hierarchical Softmax利用Huffman Tree将full Softmax的计算量从$o(V)$压缩到了$o(log(V))$。原本是有一个$V \times 1$维的输出层，然后通过softmax得到所有token的概率。
-1. HS丢弃了生成$V$维向量再softmax的思想，而是生成一个d维（100、300等）向量$h$，
+Hierarchical Softmax利用Huffman Tree将full Softmax的计算量从 $o(V)$ 压缩到了 $o(log(V))$。
+
+1. HS丢弃了生成$V$维向量再`softmax`的思想，而是生成一个$d$维向量$h$，
 2. 构造一颗Huffman Tree树（节点按词频作为权重构建，这样高频词需要的计算量更少），树的每个节点都是一个h维的参数 $\theta$
 3. 我们已知当前预测的词是 $w_k$ ，那么就知道从根节点到 $w_k$ 路径上有 $m$ 个内部节点：${n_1, n_2, ..., n_m}$，每个内部节点 $n_j$​ 对应参数向量 $θ_j$​。
 4. 每个节点的概率$p_i = \sigma(\theta_i \cdot h)$，对应路径上的总概率 $p(w_k | h) = \prod_{j=1}^m [p_j]^{b_jk} [1-p_j]^{1-b_jk}$
