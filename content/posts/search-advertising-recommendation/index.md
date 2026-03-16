@@ -207,5 +207,28 @@ $$
 - $\langle v_i, v_j \rangle$：两个向量的内积，用来表示特征 $i$ 和特征 $j$ 组合时的强度。
 
 ### Deep&Cross
+{{< alert "file-lines" >}}
+相比于`DeepFM`的二阶交叉，实现了显式的 **高阶特征交叉**
+{{< /alert >}}
+
+![](/img/deep_cross.jpeg)
+
+同样是替换了Wide部分，假设第 $l$ 层的输出向量为 $x_l$，那么第 $l+1$ 层的输出公式如下：
+
+$$
+x_{l+1} = x_0 x_l^T w_l + b_l + x_l
+$$
+
+1. **$x_0$：** 最初的输入向量（所有 Embedding 拼接后的长向量）。注意，每一层都要乘一遍 $x_0$。
+
+2. **$x_l^T w_l$：** 这是一个标量计算。$x_l^T$ 是 $1 \times d$ 的行向量，$w_l$ 是 $d \times 1$ 的列向量。它们的乘积是一个具体的数值。
+
+3. **$x_0 (x_l^T w_l)$：** 这是对 $x_0$ 进行缩放，但如果展开的话可以看出是交叉项：
+
+$$
+[x_{l+1}]_i = [x_0]_i \cdot \left( \sum_{j=1}^d [x_l]_j \cdot [w_l]_j \right)
+$$
+
+4. **$b_l$ 和 $x_l$：** $b_l$ 是偏置，$x_l$ 是残差连接（Residual Connection），保证了深层网络不会退化，且容易训练。
 
 ### DIN
