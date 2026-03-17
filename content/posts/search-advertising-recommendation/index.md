@@ -232,3 +232,29 @@ $$
 4. **$b_l$ 和 $x_l$：** $b_l$ 是偏置，$x_l$ 是残差连接（Residual Connection），保证了深层网络不会退化，且容易训练。
 
 ### DIN
+{{< alert "file-lines" >}}
+用户的兴趣是多样的，且随当前场景动态变化
+{{< /alert >}}
+
+![](/img/din.jpeg)
+
+在图中的 **Base 模型** 里，用户历史行为向量（User Behavior Sequence）经过 Embedding 后，直接进行 **SUM Pooling**。
+
+$$
+V_{user} = \sum_{i=1}^H e_i
+$$
+
+（其中 $e_i$ 是第 $i$ 个历史行为的 Embedding，$H$ 是历史长度）
+
+**缺点：** 无论当前的候选广告（Candidate Ad）是什么，用户的表达 $V_{user}$ 都是固定的。这在物理意义上很不合理：我买过“奶粉”也买过“显卡”，现在给我推“RTX 5090”，我的“奶粉”兴趣不应该贡献权重。
+
+DIN 引入了 **Activation Unit**（激活单元），将用户的表达改写为加权和：
+
+$$
+V_{user}(v_A) = \sum_{i=1}^H a(e_i, v_A) e_i = \sum_{i=1}^H w_i e_i
+$$
+
+其中，$a(e_i, v_A)$ 就是激活分值。
+
+- $v_A$ 是候选广告（Target Ad）。
+- $w_i$ 是针对当前广告计算出的权重。这意味着同一个用户，在面对不同广告时，其 $V_{user}$ 是动态变化的。
