@@ -335,7 +335,7 @@ GPU 的强大在于“并行掩盖延迟”。如果你把 Tile 设得非常大�
 ```
 
 ## 实现
-实现很简单，首先我们将需要计算的两个矩阵 $M$ 和 $N$ 拆分成 $\text{TILE_WIDTH} \times \text{TILE_WIDTH}$ 的小矩阵 $M_{tile}$ 和 $N_{tile}$，并且保障TILE_WIDTH是小于BLOCK_DIM的，这样每个线程刚好负责从 Global Memory 搬运 1 个 元素到 Shared Memory。然后将 $M_{tile}$ 和 $N_{tile}$ 的数据平均拆给每个线程去读写到shared memory中，等都读完之后就使用shared memory中的数据开始计算。
+实现很简单，首先我们将需要计算的两个矩阵 $M$ 和 $N$ 拆分成 $\text{TILE\_WIDTH} \times \text{TILE\_WIDTH}$ 的小矩阵 $M_{tile}$ 和 $N_{tile}$，并且保障TILE_WIDTH是小于BLOCK_DIM的，这样每个线程刚好负责从 Global Memory 搬运 1 个 元素到 Shared Memory。然后将 $M_{tile}$ 和 $N_{tile}$ 的数据平均拆给每个线程去读写到shared memory中，等都读完之后就使用shared memory中的数据开始计算。
 
 **涉及到两次阻塞：**
 

@@ -34,15 +34,15 @@ Context Length: 32,768
   "eos_token_id": 151645,
   "head_dim": 128,
   "hidden_act": "silu",
-  "hidden_size": 1024,
+  "hidden\_size": 1024,
   "initializer_range": 0.02,
   "intermediate_size": 3072,
   "max_position_embeddings": 40960,
   "max_window_layers": 28,
   "model_type": "qwen3",
-  "num_attention_heads": 16,
+  "num\_attention\_heads": 16,
   "num_hidden_layers": 28,
-  "num_key_value_heads": 8,
+  "num\_key\_value\_heads": 8,
   "rms_norm_eps": 1e-06,
   "rope_scaling": null,
   "rope_theta": 1000000,
@@ -80,15 +80,15 @@ Context Length: 32,768
   "eos_token_id": 151645,
   "head_dim": 128,
   "hidden_act": "silu",
-  "hidden_size": 2048,
+  "hidden\_size": 2048,
   "initializer_range": 0.02,
   "intermediate_size": 6144,
   "max_position_embeddings": 40960,
   "max_window_layers": 28,
   "model_type": "qwen3",
-  "num_attention_heads": 16,
+  "num\_attention\_heads": 16,
   "num_hidden_layers": 28,
-  "num_key_value_heads": 8,
+  "num\_key\_value\_heads": 8,
   "rms_norm_eps": 1e-06,
   "rope_scaling": null,
   "rope_theta": 1000000,
@@ -109,34 +109,36 @@ Context Length: 32,768
 模型的参数量由很多因素决定：
 
 1. **模型架构** 这是很显然的，不同架构模型本身都不一样（下面只讨论相似架构下的情况）
-2. **层数** 网络的层级越深，需要的参数越多，一般成线性增长关系o(N)
-3. **hidden dim** 隐藏层维度是最容易控制参数量的，他在保持架构层级的前提下高效控制参数量，而且是平方增长关系o(D^2)
+2. **层数** 网络的层级越深，需要的参数越多，一般成线性增长关系 $o(N)$
+3. **hidden dim** 隐藏层维度是最容易控制参数量的，他在保持架构层级的前提下高效控制参数量，而且是平方增长关系 $o(D^2)$
 
-在具体推导之前，可以给一个结论，decoder-only的模型每层（注意力+FFN）的参数大小：
+在具体推导之前，可以给一个结论，`decoder-only`的模型每层（注意力+FFN）的参数大小：
 
-$
+$$
 P_{layer} \approx 4d_{model}^2 + 2 \times (d_{model} \times d_{ff})
-$
+$$
 
 如果是 GQA（Grouped Query Attention），Attention 部分则变为：
 
-$
+$$
 P_{attn} = d_{model} \times d_{head} \times (n_q + n_{kv} + n_{kv}) + (n_q \times d_{head} \times d_{model})
-$
+$$
 
 如果是SwiGLU，FFN部分则变为：
 
-$
+$$
 P_{ffn} = 3 \times (d_{model} \times d_{ff})
-$
+$$
 
 回到Qwen的这个例子🌰，**Qwen3-0.6B**整体参数是0.6B，非embedding为0.44B，embedding为0.16B。我们走一遍流程
 
-* $d_{model} = 1024$ 
+* $d_{model} = 1024$
 
-* $n_{\text{heads_q}} = 16$
+* $d_{ff} = 3072$ 
 
-* $n_{\text{heads_kv}} = 8$
+* $n_{heads\_q} = 16$
+
+* $n_{heads\_kv} = 8$
 
 * $d_{head} = 128$
 
@@ -192,9 +194,9 @@ embedding参数主要有如下影响：
 非embedding参数主要有如下影响：
 
 - 注意力层：
-    - $W_Q$ 的形状是 $(hidden_{size}, \text{num_attention_heads} * head_{dim}) = (1024, 2048)$
-    - $W_K$、$W_V$ 的形状是 $(hidden_{size}, \text{num_key_value_heads} × head_{dim}) = (1024, 1024)$。
-    - 输出投影参数形状是 $(\text{num_attention_heads} * head_{dim}, hidden_{size}) = (2048, 1024)$
+    - $W_Q$ 的形状是 $(hidden_{size}, \text{num\_attention\_heads} * head_{dim}) = (1024, 2048)$
+    - $W_K$、$W_V$ 的形状是 $(hidden_{size}, \text{num\_key\_value\_heads} * head_{dim}) = (1024, 1024)$。
+    - 输出投影参数形状是 $(\text{num\_attention\_heads} * head_{dim}, hidden_{size}) = (2048, 1024)$
 
 注意力层每一层的总参数量是：$1024 \times 2048 \times 3 = 6291456$
 
@@ -206,7 +208,7 @@ embedding参数主要有如下影响：
 前馈网络每一层的总参数量是：$1024 \times 3072 \times 3 = 9437184$
 
 - 归一化层（RMSNorm）:
-RMSNorm 的参数量极小，每层 2 个，称之为Pre-Norm（前置归一化），分别是注意力层之前、FFN层之前，每个大小为 $\text{hidden_size}$，可得 $2 \times 1024 = 2048$
+RMSNorm 的参数量极小，每层 2 个，称之为Pre-Norm（前置归一化），分别是注意力层之前、FFN层之前，每个大小为 $\text{hidden\_size}$，可得 $2 \times 1024 = 2048$
 
 总共28层：$(6291456 + 9437184 + 2048) \times 28 = 440459264$
 约为0.44B
@@ -244,18 +246,18 @@ $$
 总 KV Cache 显存（字节）可写为：
 
 $$
-M_{\text{kv}} = 2 \times n_{layers} \times n_{\text{heads_kv}} \times d_{head} \times L \times B \times b
+M_{\text{kv}} = 2 \times n_{layers} \times n_{\text{heads\_kv}} \times d_{head} \times L \times B \times b
 $$
 
 - $n_{layers}$：层数（num_hidden_layers）
-- $n_{\text{heads_kv}}$：KV 头数（num_key_value_heads）
+- $n_{\text{heads\_kv}}$：KV 头数（num\_key\_value\_heads）
 - $d_{head}$：头维度（head_dim）
 - $L$：当前序列长度（已生成 token 数 + 输入长度），与形状 $(B, L, d_{model})$ 中的 $L$ 一致
 - $B$：batch size
 - $b$：每元素字节数（如 bf16 取 2）
 - 前面的 $2$ 表示 K 和 V 各一份
 
-**Qwen3-0.6B 示例**：$n_{layers}=28$，$n_{\text{heads_kv}}=8$，$d_{head}=128$，$b=2$，$B=1$，$L=2048$：
+**Qwen3-0.6B 示例**：$n_{layers}=28$，$n_{\text{heads\_kv}}=8$，$d_{head}=128$，$b=2$，$B=1$，$L=2048$：
 
 $$
 M_{\text{kv}} = 2 \times 28 \times 8 \times 128 \times 2048 \times 1 \times 2 \approx 224\text{MB}
