@@ -69,3 +69,97 @@ $$
 
 - **归一化：** 它抵消了 $r$ 增加带来的矩阵乘积数值增长。
 - **超参数迁移：** 这使得 $\alpha$ 变成了一个相对独立的“强度”开关。如果你在 $r=8$ 时找到了一个很好用的学习率和 $\alpha$，当你决定升级到 $r=16$ 以捕获更多特征时，由于有 $1/r$ 的存在，你往往可以直接沿用之前的学习率，而不需要重新调优。
+
+## 实战
+
+{{< alert "file-lines" >}}
+基于transformers的API对 `Qwen3-0.6B` 模型进行微调实战
+{{< /alert >}}
+
+```py
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    TrainingArguments,
+    DataCollatorForLanguageModeling,
+    Trainer,
+)
+from peft import LoraConfig, get_peft_model
+```
+
+1. 加载`base_model`和`tokenizer`
+
+```py
+base_model = AutoModelForCausalLM.from_pretrained(
+    local_model_dir,
+    dtype=torch.bfloat16,  # 5090 必须用 bf16
+    device_map="auto",    # 自动把模型切分到可用设备（如 GPU）
+    local_files_only=True,  # 强制本地加载模型
+    # attn_implementation="flash_attention_2", # 启用 Flash Attention 2
+)
+
+tokenizer = AutoTokenizer.from_pretrained(
+    local_model_dir,  # 直接指定本地下载的路径
+    local_files_only=True,  # 强制只使用本地文件，不联网
+    fix_mistral_regex=True, # 在 Qwen3 (基于 Qwen2.5 架构) 上出现正则错误，可能会导致 \n\n 或 1. 2. 3. 这种特殊符号被错误切分。
+)
+```
+
+2. 配置`LoraConfig`
+
+设置 $r$、$\alpha$、$dropout$ 等参数，并将其和`base_model`组合成`peft_model`。工程实现上，`lora_alpha`通常是r的一到两倍。`lora_dropout` 在lora输入的起始端，提高模型对输入特征的泛化能力
+
+```py
+# 0.6B 模型很小，Rank 可以设大一点（如 64）来增强吸收能力
+peft_config = LoraConfig(
+    r=16,
+    lora_alpha=16,
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    lora_dropout=0.05,
+    bias="none",
+    task_type="CAUSAL_LM",
+)
+
+model = get_peft_model(base_model, peft_config)
+```
+
+3. 数据处理 & 训练
+
+```py
+dataset = process_data(dataset_path, tokenizer, 1024)
+
+training_args = TrainingArguments(
+    output_dir=output_dir,
+    per_device_train_batch_size=2,
+    gradient_accumulation_steps=16,
+    learning_rate=5e-5,
+    num_train_epochs=1,
+    lr_scheduler_type="cosine",
+    warmup_ratio=0.1,
+    weight_decay=0.05,
+    logging_steps=5,
+    save_strategy="epoch",
+    bf16=True,
+    tf32=True,
+    save_total_limit=2,
+    report_to="none",
+    label_smoothing_factor=0.1,
+)
+
+# 自动数据整理工具，把长短不一的文本数据，加工成模型能直接批量训练的标准格式。
+# mlm=False: 因果语言模型；mlm=True: 掩码语言模型
+data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=dataset,
+    data_collator=data_collator,
+)
+
+trainer.train()
+
+# 保存 LoRA 适配器权重和 tokenizer（基础模型用原始的 Qwen 权重）
+model.save_pretrained(lora_final_dir)
+tokenizer.save_pretrained(lora_final_dir)
+```
