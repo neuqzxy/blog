@@ -36,6 +36,12 @@ git submodule update --init --recursive
 
 启动后在浏览器打开 `http://localhost:1313`。改文章或配置后会自动刷新。
 
+## 部署到 GitHub Pages
+
+仓库已配置 GitHub Actions：推送到 `master` 分支时会自动构建并发布到 GitHub Pages，也可以在 GitHub Actions 页面手动运行 `Build and deploy Hugo site`。
+
+首次部署前，在 GitHub 仓库的 **Settings → Pages → Build and deployment** 中，将 **Source** 设为 **GitHub Actions**。工作流会递归检出 Blowfish 主题子模块，使用 Hugo Extended 构建，并自动采用 Pages 提供的站点 URL。当前仓库对应的项目站点地址为 <https://neuqzxy.github.io/blog/>。
+
 生产环境构建（不包含草稿）：
 
 ```bash

@@ -1,3 +1,9 @@
-baseURL = 'https://example.org/'
+# GitHub Actions supplies the Pages URL at build time. Set a local default for
+# `hugo server` and other builds that do not provide --baseURL.
+baseURL = 'https://neuqzxy.github.io/blog/'
 languageCode = 'en-us'
-title = 'My New Hugo Project'
+title = '欣仔的技术小屋'
+
+[caches]
+  [caches.images]
+    dir = ':cacheDir/images'
