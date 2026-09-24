@@ -60,9 +60,31 @@ $$
 - $\gamma, \beta \in \mathbb{R}^{D}$：按特征维度的一维可学习参数向量，通常初始化为 $\gamma = \mathbf{1}, \beta = \mathbf{0}$；
 - 输出 $Y$：归一化后的张量，形状与输入 $X$ 完全一致（$B \times D$）。
 
-## Layer Normalization（LN，层归一化）
+### 5. 实践：batch size 的经验值
+
+> BN 的 $\mu_d$、$\sigma_d^2$ 来自**当前 batch 的样本统计**；batch 越小，估计越 noisy，训练越不稳定。
+
+**全连接 / 小特征图**（统计维度主要就是 $B$）：
+
+- **$B \ge 32$**：常见默认区间，统计较稳定；原 BN 论文在 ImageNet 上多用 $B=128\sim256$。
+- **$B \approx 16$**：多数 CV 任务仍可工作，但小 batch 下可能需要略调学习率或加强正则。
+- **$B \le 8$**：方差估计噪声明显，loss 易震荡；若必须用，优先考虑 **SyncBN**（多卡同步 batch 统计）或换 **GroupNorm / LayerNorm**。
+- **$B = 1$**（全连接 / 小特征图）：训练模式下 $\mu_d = X_{1,d}$、$\sigma_d^2 = 0$，归一化后 $\hat{X}_{1,d} \approx 0$，输出退化为 $Y_{i,d} = \beta_d$——**与不加 BN 差别很大**（输入被抹掉，只剩可学习偏置），并非“加不加都一样”。`eval()` 下走 running 统计时仍会正常归一化。
+
+**卷积层**（对 $(N, H, W)$ 聚合，每个通道的等效样本数约为 $N \times H \times W$）：
+
+- 对 per-GPU 的 **$N$** 不如 FC 层敏感；特征图较大时，即使 $N=8\sim16$ 有时也能训，但仍建议 **$N \ge 16$** 作为起点。
+- 多卡训练时，若单卡 $N$ 很小，**SyncBN** 把各卡的 $N \times H \times W$ 统计合并，等效于增大 batch。
+
+**训练 vs 推理**：
+
+- **训练**：batch 大小直接影响 $\mu_d$、$\sigma_d^2$ 的质量；同时框架会用 EMA 维护 **running mean / running var**，供推理使用。
+- **推理**：一般走 `eval()` + running 统计，与推理时的 batch size 关系不大；若在 `train()` 下做小 batch 推理，仍会引入 batch 噪声。
+
+主流 LLM（GPT、Llama 等）**基本不用 BN**，而用 **LN / RMSNorm**（见下文）：归一化按**每个 token 的 hidden 向量**进行，不依赖 batch 统计，与变长序列、小 batch 推理/RLHF 更匹配。BN 在 CV 里的大 batch、SyncBN 等经验，对 LLM 训练参考价值有限。
 > 同一样本、跨特征维度进行归一化，即对单个样本的所有特征维度计算均值和方差
 
+## Layer Normalization（LN，层归一化）
 ### 1. 对单个样本计算均值
 
 对第 $i$ 个样本（向量维度为 $D$），LN 的均值为：
