@@ -1,5 +1,5 @@
 ---
-title: "深度剖析高斯分布：从 1D Gaussian 到 3D Gaussian Splatting"
+title: 深度剖析高斯分布：从 1D Gaussian 到 3D Gaussian Splatting
 date: 2026-09-23 21:55:43
 tags:
   - Math
@@ -8,11 +8,7 @@ tags:
 categories:
   - ML
 ---
-# 深度剖析高斯分布：从 1D Gaussian 到 3D Gaussian Splatting
-
-## 0. 引言：为什么高斯分布如此特殊？
-
-### 0.1 高斯分布无处不在
+## 引言：为什么高斯分布如此特殊？
 
 高斯分布在概率教材里出现得很早，早到容易让人把它当成一条方便画出来的钟形曲线。真正值得停下来的，是它后来出现的场合。测量、滤波、随机过程、生成模型和实时渲染，几乎不共享研究对象，却一次次选中同一种分布。
 
@@ -28,11 +24,9 @@ categories:
 
 答案先不一次说完。这里只放下后面会反复用到的几条线索。一个高斯分布，用均值和协方差就能完整描述。对它做线性或仿射变换，结果仍是高斯。一组变量的联合分布若是高斯，丢掉其中一部分，剩下的边缘分布仍是高斯；已知另一部分之后，条件分布也仍是高斯。把两个高斯密度乘在一起，结果仍然和一个高斯紧密相关。到了高维，它还有一套干净的几何图像。再往实现看，它还可以被高效地投影和渲染。
 
-## Part I：从一维高斯真正理解 Gaussian
+## 一、一维高斯分布
 
-### 1. 一维高斯分布
-
-#### 1.1 从公式开始
+### 1.1 从公式开始
 
 若随机变量 $X$ 服从均值为 $\mu$、方差为 $\sigma^2$ 的高斯分布，记作：
 
@@ -69,7 +63,7 @@ $$
 Z = \frac{X - \mu}{\sigma}
 $$
 
-#### 1.2 为什么指数中是平方？——距离与几何本质
+### 1.2 为什么指数中是平方？——距离与几何本质
 
 指数上的核心项是：
 
@@ -77,7 +71,7 @@ $$
 \frac{(x - \mu)^2}{\sigma^2} = \left( \frac{x - \mu}{\sigma} \right)^2
 $$
 
-其中 $|x - \mu|$ 是样本点 $x$ 到中心 $\mu$ 在实数轴上的欧氏距离，再除以 $\sigma$，就得到“以标准差为单位”的距离。这个标准化后的距离正是一维情形下的 [Mahalanobis distance](/posts/mahalanobis-distance/)，记作 $D_M(x) = \dfrac{|x - \mu|}{\sigma}$。
+其中 $|x - \mu|$ 是样本点 $x$ 到中心 $\mu$ 在实数轴上的欧氏距离，再除以 $\sigma$，就得到"以标准差为单位"的距离。这个标准化后的距离正是一维情形下的 [Mahalanobis distance](/posts/mahalanobis-distance/)，记作 $D_M(x) = \dfrac{|x - \mu|}{\sigma}$。
 
 于是高斯分布的本质可以浓缩为一个极简的形式：
 
@@ -87,7 +81,7 @@ $$
 
 当 $\sigma = 1$ 时，$D_M$ 就退化为普通的欧氏距离。
 
-### 2. 经验法则
+## 二、经验法则
 
 > 正态分布几乎所有样本都集中在 $\mu \pm 3\sigma$ 之内，超出 $3\sigma$ 的事件非常罕见，这就是 **3σ 准则**。
 
@@ -97,11 +91,9 @@ $$
 2. **$\mu \pm 2\sigma$**：约 **95.45%** 的数据落在区间内；
 3. **$\mu \pm 3\sigma$**：约 **99.73%** 的数据落在区间内。
 
-## Part II：从 1D 到 2D——协方差第一次出现
+## 三、二维 Gaussian：协方差第一次出现
 
-### 3. 二维 Gaussian
-
-#### 3.1 从公式开始
+### 3.1 从公式开始
 
 定义二维随机向量：
 
@@ -131,7 +123,7 @@ $$
 
 $\Sigma$ 是一个 $2 \times 2$ 的协方差矩阵。要理解它，先要理解 covariance。
 
-#### 3.2 从 variance 到 covariance
+### 3.2 从 variance 到 covariance
 
 考虑两个随机变量 $X$ 和 $Y$。如果某个样本满足 $X > \mu_x$ 且 $Y > \mu_y$，那么 $(X - \mu_x)(Y - \mu_y) > 0$。当 $X$ 和 $Y$ **经常同时偏离各自均值的同一方向**时，这个乘积的平均值就会是正的。据此定义 covariance：
 
@@ -163,7 +155,7 @@ $$
 
 注意前提是**联合** Gaussian：仅仅 $X$ 和 $Y$ 各自服从 Gaussian 还不够。什么样的随机向量才算联合 Gaussian、为什么这个前提不能省，放到 3.4 讨论。
 
-#### 3.3 协方差矩阵与二维 Gaussian 的密度
+### 3.3 协方差矩阵与二维 Gaussian 的密度
 
 3.1 只写下了记号 $\mathcal N(\boldsymbol \mu, \Sigma)$，还欠两样东西：
 
@@ -341,7 +333,7 @@ $$
 
 它是一维"以标准差为单位的距离平方"的推广，下一节就来看它的几何含义。
 
-#### 3.4 什么样的随机向量是联合 Gaussian
+### 3.4 什么样的随机向量是联合 Gaussian
 
 前面一直在说"联合 Gaussian"，现在给出它的判定。下面的说法对任意维度 $\mathbf x \in \mathbb R^n$ 都成立，二维只是 $n = 2$ 的情形。以下三条等价：
 
@@ -371,7 +363,7 @@ $$
 
 联合密度等于边缘密度的乘积，这正是独立的定义。高维时同理：$\Sigma$ 是分块对角阵，对应的各组分量就相互独立。
 
-#### 3.5 Mahalanobis distance 与椭圆
+### 3.5 Mahalanobis distance 与椭圆
 
 上面这个二次型正是 Mahalanobis distance 的平方：
 
@@ -402,9 +394,7 @@ $$
 
 完整的推导和例子见 [Mahalanobis distance](/posts/mahalanobis-distance/)。
 
-## Part III：3D Gaussian——从椭圆到椭球
-
-### 4. 3D Gaussian 的几何意义
+## 四、3D Gaussian：从椭圆到椭球
 
 定义三维随机向量：
 
@@ -430,7 +420,15 @@ $$
 \end{bmatrix}
 $$
 
-讨论等概率密度曲面：
+三维的概率密度可以直接由 3.4 的 $n$ 维公式取 $n = 3$ 得到：
+
+$$
+p(\mathbf x) = \frac{1}{(2 \pi)^{3/2} |\Sigma|^{1/2}} \exp\left( -\frac{1}{2} (\mathbf x - \boldsymbol \mu)^\top \Sigma^{-1} (\mathbf x - \boldsymbol \mu) \right)
+$$
+
+和一维、二维相比，变化的只有维度、均值向量和协方差矩阵：指数仍然是 Mahalanobis distance 的平方；归一化系数里的 $|\Sigma|^{1/2}$，从二维时的面积伸缩变成了三维时的体积伸缩。
+
+讨论三维 Gaussian 的等密度曲面：
 
 $$
 (\mathbf x - \boldsymbol \mu)^\top \Sigma^{-1} (\mathbf x - \boldsymbol \mu) = c^2
@@ -449,4 +447,320 @@ $$
 - 三个互相正交的主方向 $q_1, q_2, q_3$，即椭球主轴的方向；
 - 对应的尺度 $\sqrt{\lambda_1}, \sqrt{\lambda_2}, \sqrt{\lambda_3}$，即沿各主轴的标准差。
 
-这就是 3D Gaussian Splatting 中 Gaussian primitive 的核心几何结构。3DGS 的原始论文把协方差写成 $\Sigma = R S S^\top R^\top$，其中 $R$ 是旋转矩阵，$S$ 是对角缩放矩阵。这和 $Q \Lambda Q^\top$ 是同一件事：$R$ 对应 $Q$，$S$ 的对角元素对应 $\sqrt{\lambda_i}$。这种参数化在优化过程中能始终保证 $\Sigma$ 是合法的（对称半正定）协方差矩阵。
+这就是 3D Gaussian Splatting 中每个 Gaussian 基元的几何结构：一个有中心、有朝向、三个方向长短不一的椭球。3DGS 论文没有直接用特征分解的记号，而是把协方差写成 $\Sigma = R S S^\top R^\top$。5.2 节会说明这两种写法是同一件事，以及 3DGS 为什么选择后者。
+
+### 4.1 三维的"3σ 椭球"并不包含 99.73% 的概率
+
+用椭球画出一个 Gaussian 的"范围"时，很自然会把第二章的经验法则搬过来，以为 $D_M \le 3$ 的椭球包含 99.73% 的概率。这在三维里并不成立。
+
+为了算出椭球内部的概率，借用 3.3 的构造：任何非退化的 Gaussian 都可以写成 $\mathbf x = \boldsymbol \mu + A \mathbf z$，其中 $\Sigma = A A^\top$，$\mathbf z$ 由相互独立的标准正态组成（三维时有三个分量）。3.3 已经推出，点与点的对应满足
+
+$$
+D_M(\mathbf x)^2 = (\mathbf x - \boldsymbol \mu)^\top \Sigma^{-1} (\mathbf x - \boldsymbol \mu) = \mathbf z^\top \mathbf z = z_1^2 + z_2^2 + z_3^2
+$$
+
+$n$ 个独立标准正态的平方和服从自由度为 $n$ 的卡方分布 $\chi^2_n$。所以椭球 $D_M(\mathbf x) \le c$ 内部的概率就是 $P(\chi^2_n \le c^2)$。把一维、二维、三维放在一起对比：
+
+| $c$ | 一维 | 二维 | 三维 |
+| --- | --- | --- | --- |
+| 1 | 68.27% | 39.35% | 19.87% |
+| 2 | 95.45% | 86.47% | 73.85% |
+| 3 | 99.73% | 98.89% | 97.07% |
+
+维度越高，同样的 $c$ 包住的概率越少：每多一个维度，样本就多一个可以偏离中心的方向。不过，沿任意一个方向单独看，投影仍是一维 Gaussian，仍然遵循 1σ、2σ、3σ 的规律。
+
+这个细节在 3DGS 中直接用得上。数学上 Gaussian 的尾部无限延伸，但实现时必须给每个 Gaussian 划定一个有限的影响范围。官方实现在屏幕上取 $3 \sqrt{\lambda_{\max}}$ 作为半径，其中 $\lambda_{\max}$ 是二维屏幕协方差（6.4 节）的较大特征值。由上表，二维 3σ 椭圆之外只剩约 1.1% 的概率，而这个半径对应的圆还把椭圆整个包在里面。这里的 $c$ 是一个截断阈值，而不是一个固定的概率百分比。
+
+## 五、从概率密度到 3DGS 的 Gaussian 基元
+
+前四章讲的是 Gaussian 本身，从这一章开始进入 3DGS。3DGS 要做的是：用大量 3D Gaussian 表示一个场景，再把它们画成图像。第五到第七章只讲其中和 Gaussian 数学直接相关的四件事：
+
+1. 3DGS 用的 Gaussian 和概率密度有什么不同（5.1 节）；
+2. 协方差怎样参数化，才能在训练中始终合法（5.2 节）；
+3. 三维椭球怎样投影成屏幕上的二维椭圆（第六章）；
+4. 屏幕上的椭圆怎样变成像素的颜色（第七章）。
+
+前面讨论的 $\mathcal N(\boldsymbol \mu, \Sigma)$ 是**概率分布**，描述"一个随机点会落在哪里"。3DGS 里的 Gaussian 则是场景中一个看得见的小椭球，称为基元（primitive），描述"空间中这一块有多少东西"。两者共用均值和协方差的几何，但用途不同，不能直接混为一谈。
+
+### 5.1 为什么 3DGS 使用不带归一化系数的 Gaussian
+
+把三维密度拆成两部分：
+
+$$
+p(\mathbf x) = \underbrace{\frac{1}{(2 \pi)^{3/2} |\Sigma|^{1/2}}}_{\text{归一化系数}} \cdot \underbrace{\exp\left( -\frac{1}{2} (\mathbf x - \boldsymbol \mu)^\top \Sigma^{-1} (\mathbf x - \boldsymbol \mu) \right)}_{G(\mathbf x)}
+$$
+
+1.1 节说过，归一化系数只负责让总概率为 1，决定形状的是后面的指数部分。3DGS 只使用后一部分，记作
+
+$$
+G(\mathbf x) = \exp\left( -\frac{1}{2} (\mathbf x - \boldsymbol \mu)^\top \Sigma^{-1} (\mathbf x - \boldsymbol \mu) \right)
+$$
+
+它有三个性质：
+
+- 中心由 $\boldsymbol \mu$ 决定，且 $G(\boldsymbol \mu) = 1$；
+- 形状和朝向由 $\Sigma$ 决定，按 Mahalanobis distance 衡量，离中心越远，值越小；
+- 取值在 0 到 1 之间，不要求积分为 1。
+
+为什么要去掉归一化系数？看看协方差变大时会发生什么。对概率密度来说，$|\Sigma|$ 变大，归一化系数变小，峰值随之降低：同样多的概率摊到更大的体积上，自然变稀。对 $G(\mathbf x)$ 来说，无论 $\Sigma$ 多大，中心值始终是 1。
+
+这正是渲染需要的。一个 Gaussian 在画面上覆盖多大范围、它有多不透明，应该能分别调节。如果用概率密度，把椭球放大就会自动让它变淡，两件事被绑在了一起。3DGS 让 $\Sigma$ 只管范围，再单独学习一个不透明度参数（7.1 节）来管浓淡。
+
+所以要注意：$G(\mathbf x)$ 不是概率，只是一个 0 到 1 之间的空间权重。
+
+### 5.2 协方差为什么写成旋转 $R$ 与尺度 $S$
+
+训练 3DGS 时，每个 Gaussian 的协方差都要靠梯度下降来调整。问题在于：一个 $3 \times 3$ 矩阵要成为合法的协方差，必须对称且正定（3.3 节），而梯度下降每一步只是把各个元素加减一点，并不保证这两条性质。直接优化矩阵元素，几步之后就可能得到一个不合法的"协方差"，$\Sigma^{-1}$ 和 $G(\mathbf x)$ 也就无从谈起。
+
+3DGS 的办法是换一组参数：
+
+$$
+\Sigma = R S S^\top R^\top,
+\qquad
+S = \operatorname{diag}(s_x, s_y, s_z),
+\qquad
+R^\top R = I
+$$
+
+其中 $R$ 是旋转矩阵，$S$ 是对角缩放矩阵。由于 $S$ 是对角阵，$S S^\top = \operatorname{diag}(s_x^2, s_y^2, s_z^2)$。
+
+这个式子可以从 3.3 的构造直接读出来。3.3 说明，任何 Gaussian 都可以写成 $\mathbf x = \boldsymbol \mu + A \mathbf z$，协方差为 $\Sigma = A A^\top$。取 $A = R S$：
+
+$$
+\mathbf x = \boldsymbol \mu + R S \mathbf z
+$$
+
+它对应的几何过程是：
+
+1. 标准 Gaussian $\mathbf z$ 的等密度面是球面；
+2. 乘以 $S$，沿三个坐标轴分别拉伸，得到与坐标轴对齐的椭球；
+3. 乘以 $R$，把椭球旋转到想要的朝向；
+4. 加上 $\boldsymbol \mu$，把它平移到场景中的位置。
+
+协方差就是 $A A^\top = (R S)(R S)^\top = R S S^\top R^\top$。
+
+这组参数有两个好处：
+
+- **自动合法**：只要每个 $s_i \ne 0$，$\Sigma$ 就一定对称正定。对称是因为 $\Sigma^\top = \Sigma$；正定是因为对任意非零向量 $\mathbf a$，$\mathbf a^\top \Sigma \mathbf a = \| S^\top R^\top \mathbf a \|^2 > 0$（$R$、$S$ 都可逆，$S^\top R^\top \mathbf a$ 不会是零向量）。
+- **含义直观**：$s_i$ 管椭球三个方向的长短，$R$ 管朝向。
+
+实现上，旋转用归一化的四元数表示（四个数，归一化后恰好对应一个三维旋转），尺度写成 $s_i = \exp(\ell_i)$ 以保证为正。训练时优化的是四元数和 $\ell_i$，而不是矩阵元素。
+
+和第四章的特征分解对照：$\Sigma = R S S^\top R^\top$ 与 $\Sigma = Q \Lambda Q^\top$ 形式完全相同，$R$ 对应 $Q$（主轴方向），$s_i^2$ 对应特征值 $\lambda_i$。**3DGS 没有发明新的 Gaussian，只是换了一组更方便优化的参数来描述同一个椭球。**
+
+## 六、三维 Gaussian 如何变成屏幕上的二维 Gaussian
+
+场景里的 Gaussian 是三维椭球，图像却是二维像素网格。要把它画出来，先得知道它投影到屏幕上是什么样子：中心落在哪个像素，椭圆朝哪个方向、有多大。一个 3D Gaussian 投影到屏幕上形成的这个二维椭圆，称为 **splat**（原意是"泼溅出的一团痕迹"），3D Gaussian Splatting 的名字就来源于此。
+
+投影分两步：先从世界坐标转到相机坐标（6.2 节），再从相机坐标透视投影到像素坐标（6.3、6.4 节）。两步都要用到同一个工具：Gaussian 经过线性变换后，均值和协方差怎么变（6.1 节）。
+
+### 6.1 线性变换后的 Gaussian
+
+3.3 推导过一个特殊情形：标准 Gaussian 经过可逆方阵 $A$ 变换后，协方差为 $A A^\top$。投影需要更一般的情形：起点是任意 Gaussian，变换矩阵也可以不是方阵（比如把三维映射到二维）。
+
+设 $\mathbf x \sim \mathcal N(\boldsymbol \mu, \Sigma)$，令
+
+$$
+\mathbf y = M \mathbf x + \mathbf b
+$$
+
+其中 $M$ 是 $m \times n$ 矩阵，$\mathbf b$ 是常向量。
+
+**均值**：期望是线性的，所以 $\mathbb E[\mathbf y] = M \boldsymbol \mu + \mathbf b$。
+
+**协方差**：由 $\mathbf y - \mathbb E[\mathbf y] = M (\mathbf x - \boldsymbol \mu)$，
+
+$$
+\operatorname{Cov}(\mathbf y)
+= \mathbb E\left[ M (\mathbf x - \boldsymbol \mu) (\mathbf x - \boldsymbol \mu)^\top M^\top \right]
+= M \, \mathbb E\left[ (\mathbf x - \boldsymbol \mu) (\mathbf x - \boldsymbol \mu)^\top \right] M^\top
+= M \Sigma M^\top
+$$
+
+推导步骤和 3.3 完全相同：$(M \mathbf v)^\top = \mathbf v^\top M^\top$，常数矩阵可以移到期望外面。当 $\mathbf x$ 是标准 Gaussian（$\Sigma = I$）时，结果就退回 3.3 的 $A A^\top$。
+
+**$\mathbf y$ 仍然是 Gaussian**：任取常向量 $\mathbf a$，
+
+$$
+\mathbf a^\top \mathbf y = (M^\top \mathbf a)^\top \mathbf x + \mathbf a^\top \mathbf b
+$$
+
+这是 $\mathbf x$ 各分量的线性组合再加一个常数。$\mathbf x$ 是联合 Gaussian，按 3.4 的线性组合判定，它服从一维 Gaussian。$\mathbf y$ 的任意线性组合都是一维 Gaussian，所以 $\mathbf y$ 也是联合 Gaussian：
+
+$$
+\mathbf y \sim \mathcal N(M \boldsymbol \mu + \mathbf b, \; M \Sigma M^\top)
+$$
+
+几何上，线性变换把一个椭球变成另一个椭球；降维时（比如 $M$ 是 $2 \times 3$ 矩阵），就是把三维椭球压成二维椭圆。只要 $M \Sigma M^\top$ 满秩，结果就是非退化的。
+
+一个常用的特例是**只保留部分分量**。比如取 $M = \begin{bmatrix} 1 & 0 & 0 \\ 0 & 1 & 0 \end{bmatrix}$，$\mathbf y$ 就是 $\mathbf x$ 的前两个分量，$M \Sigma M^\top$ 正好是 $\Sigma$ 左上角的 $2 \times 2$ 块。也就是说，Gaussian 丢掉一部分分量后仍是 Gaussian（称为边缘分布），协方差直接取对应的子块。6.4 节会用到这一点。
+
+### 6.2 世界坐标系 → 相机坐标系
+
+场景中的 Gaussian 用世界坐标描述，中心和协方差记为 $\boldsymbol \mu_w$、$\Sigma_w$。渲染某个视角时，先换到相机坐标系：以相机为原点、视线方向为 $Z$ 轴。这个变换由相机外参给出：
+
+$$
+\mathbf x_c = R_c \mathbf x_w + \mathbf t_c
+$$
+
+其中 $R_c$ 是旋转，$\mathbf t_c$ 是平移。这正是 6.1 中 $M = R_c$、$\mathbf b = \mathbf t_c$ 的情形，直接得到：
+
+$$
+\boldsymbol \mu_c = R_c \boldsymbol \mu_w + \mathbf t_c,
+\qquad
+\Sigma_c = R_c \Sigma_w R_c^\top
+$$
+
+平移 $\mathbf t_c$ 只移动中心，不改变协方差：协方差描述的是围绕中心的散开方式，整体平移不影响它。这里的 $R_c$ 是相机的旋转，不要和 5.2 节中 Gaussian 自身的朝向 $R$ 混淆。3DGS 论文把这一步的变换记作 $W$（viewing transformation）。
+
+### 6.3 透视投影不是线性变换：Jacobian 从哪里来
+
+接下来要把相机坐标投影到像素坐标。采用针孔相机模型（忽略镜头畸变），相机坐标 $\mathbf x_c = (X, Y, Z)^\top$（$Z > 0$，即点在相机前方）对应的像素坐标为
+
+$$
+\pi(\mathbf x_c) = \begin{bmatrix} u \\ v \end{bmatrix} = \begin{bmatrix} f_x X / Z + c_x \\ f_y Y / Z + c_y \end{bmatrix}
+$$
+
+其中 $f_x, f_y$ 是以像素为单位的焦距，$(c_x, c_y)$ 是图像中心。
+
+问题出在除以 $Z$：$\pi$ 不是线性变换，6.1 的结论不能直接套用。事实上，一个三维 Gaussian 经过精确的透视投影后，一般不再是严格的二维 Gaussian。
+
+3DGS 的处理办法是**在 Gaussian 中心附近把 $\pi$ 近似成线性的**。Gaussian 的权重主要集中在中心附近，只要 $\pi$ 在这个范围内接近线性，近似就足够好。具体做法是在中心 $\boldsymbol \mu_c = (X_0, Y_0, Z_0)^\top$ 处做一阶泰勒展开：
+
+$$
+\pi(\mathbf x_c) \approx \pi(\boldsymbol \mu_c) + J (\mathbf x_c - \boldsymbol \mu_c)
+$$
+
+其中 $J$ 是 $\pi$ 在 $\boldsymbol \mu_c$ 处的 Jacobian 矩阵，即 $u$、$v$ 分别对 $X$、$Y$、$Z$ 求偏导：
+
+$$
+J = \begin{bmatrix} \dfrac{\partial u}{\partial X} & \dfrac{\partial u}{\partial Y} & \dfrac{\partial u}{\partial Z} \\ \dfrac{\partial v}{\partial X} & \dfrac{\partial v}{\partial Y} & \dfrac{\partial v}{\partial Z} \end{bmatrix}_{\boldsymbol \mu_c} = \begin{bmatrix} \dfrac{f_x}{Z_0} & 0 & -\dfrac{f_x X_0}{Z_0^2} \\ 0 & \dfrac{f_y}{Z_0} & -\dfrac{f_y Y_0}{Z_0^2} \end{bmatrix}
+$$
+
+逐项看：$u = f_x X / Z + c_x$ 对 $X$ 求导得 $f_x / Z$，对 $Y$ 求导得 0，对 $Z$ 求导得 $-f_x X / Z^2$；$v$ 同理。
+
+$J$ 是 $2 \times 3$ 矩阵，把相机坐标中一个微小的三维位移，映射成屏幕上一个微小的二维位移。注意第三列：沿深度方向移动，像素位置也可能变化（离光轴越远越明显），所以深度方向的分布同样会影响屏幕上的形状。
+
+### 6.4 屏幕上的二维协方差
+
+现在把两步拼起来。在线性近似下，像素坐标 $\mathbf p$ 是 $\mathbf x_c$ 的仿射函数：
+
+$$
+\mathbf p \approx \pi(\boldsymbol \mu_c) + J (\mathbf x_c - \boldsymbol \mu_c)
+$$
+
+这是 6.1 中 $M = J$、$\mathbf b = \pi(\boldsymbol \mu_c) - J \boldsymbol \mu_c$ 的情形，于是屏幕上二维 Gaussian 的中心和协方差为：
+
+$$
+\boldsymbol \mu_{2D} = \pi(\boldsymbol \mu_c),
+\qquad
+\Sigma_{2D} \approx J \Sigma_c J^\top = J R_c \Sigma_w R_c^\top J^\top
+$$
+
+**这是 3DGS 中最核心的一条公式。** 论文中写作 $\Sigma' = J W \Sigma W^\top J^\top$，其中 $W$ 就是这里的 $R_c$。逐项检查矩阵维度：
+
+$$
+\underbrace{J}_{2 \times 3}
+\underbrace{R_c}_{3 \times 3}
+\underbrace{\Sigma_w}_{3 \times 3}
+\underbrace{R_c^\top}_{3 \times 3}
+\underbrace{J^\top}_{3 \times 2}
+\longrightarrow
+\underbrace{\Sigma_{2D}}_{2 \times 2}
+$$
+
+当 $\Sigma_w$ 正定、$Z_0 > 0$ 时，$J$ 的两行线性无关，$\Sigma_{2D}$ 也是正定的，可以求逆。
+
+**和论文的写法对照。** 论文中的 $J$ 是 $3 \times 3$ 的：除了 $u$、$v$，还多一行深度方向的输出。算完 $J W \Sigma W^\top J^\top$ 得到 $3 \times 3$ 矩阵后，再"去掉第三行和第三列"，得到 $2 \times 2$ 的 $\Sigma'$。按 6.1 末尾的说法，这就是对深度求边缘分布，只保留屏幕上的两个分量。本文的 $J$ 只有 $u$、$v$ 两行，相当于提前去掉了那一行，结果完全相同。
+
+要注意的是，去掉第三行第三列必须在乘过 $J$ 之后做。如果直接去掉 $\Sigma_c$ 的第三行第三列，就等于忽略了 $J$ 的第三列，即假设深度变化不影响像素位置，那是正交投影，而不是透视投影。
+
+**用一个特例检验直觉。** 设中心正好在光轴上，即 $X_0 = Y_0 = 0$，且相机坐标中的协方差是对角阵 $\Sigma_c = \operatorname{diag}(\sigma_X^2, \sigma_Y^2, \sigma_Z^2)$。此时
+
+$$
+J =
+\begin{bmatrix}
+f_x / Z_0 & 0 & 0 \\
+0 & f_y / Z_0 & 0
+\end{bmatrix},
+\qquad
+\Sigma_{2D} =
+\begin{bmatrix}
+(f_x \sigma_X / Z_0)^2 & 0 \\
+0 & (f_y \sigma_Y / Z_0)^2
+\end{bmatrix}
+$$
+
+从中可以读出两点：
+
+- 屏幕上的标准差是 $f \sigma / Z_0$：同样大小的 Gaussian 离相机越远（$Z_0$ 越大），屏幕上的椭圆越小，这就是"近大远小"。
+- 在光轴上，深度方向的 $\sigma_Z$ 不影响屏幕上的形状：正对着看一个椭球，看不出它有多厚。离开光轴后，$J$ 的第三列不再为零，$\sigma_Z$ 和交叉协方差就会参与进来。
+
+**近似的适用范围。** 一阶近似要求 $\pi$ 在 Gaussian 的覆盖范围内接近线性。Gaussian 相对它的深度较小、离相机较远时，近似很好；Gaussian 很大、离相机很近或横跨相机近平面时，误差会明显变大。另外，官方实现会给 $\Sigma_{2D}$ 的两个对角元各加上 0.3，即使用 $\Sigma_{2D} + 0.3 I$，保证每个 splat 在屏幕上至少约有一个像素大，起到低通滤波、减轻锯齿的作用。
+
+## 七、从屏幕上的椭圆到像素颜色
+
+第六章得到了每个 splat 在屏幕上的中心和形状。接下来要回答两个问题：对屏幕上某个像素，一个 splat 对它贡献多少？多个 splat 重叠时，又怎么合成最终颜色？
+
+### 7.1 splat 在像素上的权重与不透明度
+
+和 5.1 一样，屏幕上使用不带归一化系数的二维 Gaussian：
+
+$$
+G_{2D}(\mathbf p) = \exp\left( -\frac{1}{2} (\mathbf p - \boldsymbol \mu_{2D})^\top \Sigma_{2D}^{-1} (\mathbf p - \boldsymbol \mu_{2D}) \right)
+$$
+
+其中 $\mathbf p = (u, v)^\top$ 是像素坐标。$G_{2D}$ 衡量像素离 splat 中心有多近（按二维 Mahalanobis distance），中心处为 1，等值线是椭圆，椭圆的朝向和大小由 $\Sigma_{2D}$ 的特征分解给出（3.5 节）。
+
+注意，第六章借用的是 Gaussian 随机变量在线性变换下的规律，用来求出屏幕上的中心和协方差；真正渲染时用的仍是形状权重 $G_{2D}$，而不是归一化的二维概率密度。
+
+每个 Gaussian 还有一个可学习的不透明度 $o_i \in [0, 1]$（实现中用 sigmoid 把一个无约束的参数映射到这个区间）。第 $i$ 个 splat 在像素 $\mathbf p$ 处的 alpha（不透明程度）为
+
+$$
+\alpha_i(\mathbf p) = o_i \, G_{2D, i}(\mathbf p)
+$$
+
+于是三组参数各管一件事：$\boldsymbol \mu_{2D}$ 管 splat 在屏幕上的位置，$\Sigma_{2D}$ 管它的大小、拉伸和朝向，$o_i$ 管它中心处有多不透明。这就是 5.1 中"范围与浓淡分开调节"在屏幕上的体现。
+
+### 7.2 多个 splat 重叠：alpha 合成，而不是 GMM
+
+一个像素通常被多个 splat 覆盖。它们不像引言提到的 GMM 那样按权重直接相加，因为前面的 splat 会挡住后面的。3DGS 按 Gaussian 中心的深度把 splat 从近到远排序，然后逐个合成：
+
+$$
+C(\mathbf p) = \sum_{i=1}^{N} T_i(\mathbf p) \, \alpha_i(\mathbf p) \, \mathbf c_i + T_{N+1}(\mathbf p) \, C_{\mathrm{bg}},
+\qquad
+T_i(\mathbf p) = \prod_{j < i} \left( 1 - \alpha_j(\mathbf p) \right)
+$$
+
+逐项理解：
+
+- $T_i$ 是光线到达第 $i$ 个 splat 之前还剩下的透过率：每经过一个 splat，就有 $\alpha_j$ 的比例被挡住，只剩 $1 - \alpha_j$ 继续向后；
+- 第 $i$ 个 splat 贡献的颜色是"到达它的比例 $T_i$" × "它挡下的比例 $\alpha_i$" × "它的颜色 $\mathbf c_i$"；
+- 所有 splat 都经过之后，剩下的 $T_{N+1}$ 由背景色 $C_{\mathrm{bg}}$ 补上。
+
+其中 $\mathbf c_i$ 是第 $i$ 个 Gaussian 的颜色。在 3DGS 中它会随观察方向变化，用球谐函数表示，这里不展开。
+
+## 八、小结：从 Gaussian 数学到 3DGS
+
+从一个三维 Gaussian 到屏幕上的像素，可以串成一条链：
+
+$$
+\begin{aligned}
+\Sigma_w &= R S S^\top R^\top
+&& \text{（三维椭球：旋转与尺度，5.2 节）} \\
+\boldsymbol \mu_c &= R_c \boldsymbol \mu_w + \mathbf t_c, \quad \Sigma_c = R_c \Sigma_w R_c^\top
+&& \text{（转到相机坐标，6.2 节）} \\
+\boldsymbol \mu_{2D} &= \pi(\boldsymbol \mu_c), \quad \Sigma_{2D} \approx J \Sigma_c J^\top
+&& \text{（投影成屏幕上的椭圆，6.4 节）} \\
+\alpha_i(\mathbf p) &= o_i \, G_{2D, i}(\mathbf p)
+&& \text{（像素上的不透明度，7.1 节）}
+\end{aligned}
+$$
+
+最后再由 7.2 节的 alpha 合成得到像素颜色。
+
+每一步用到的都是前文的工具：协方差的几何意义（第三、四章），线性变换下协方差的变化规律 $M \Sigma M^\top$（6.1 节），以及不带归一化系数的 Gaussian 形状函数（5.1 节）。透视投影是整条链上唯一的非线性环节，3DGS 用 Jacobian 在中心处把它线性化。
+
+理解了第五、六章的三个问题，即为什么用不带归一化系数的 Gaussian、为什么协方差要拆成旋转与尺度、为什么透视投影需要 Jacobian，就足以读懂 3DGS 原始论文中关于 Gaussian 表示与投影的数学部分。
+
+接下来要学的是 3DGS 的算法本身：可微光栅化与训练、用球谐函数表示颜色、按屏幕分块（tile）排序加速，以及 Gaussian 的增密（densification）与剪枝（pruning）。这些可以放到下一篇文章。
