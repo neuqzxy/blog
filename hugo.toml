@@ -1,7 +1,7 @@
 # GitHub Actions supplies the Pages URL at build time. Set a local default for
 # `hugo server` and other builds that do not provide --baseURL.
 baseURL = 'https://neuqzxy.github.io/blog/'
-languageCode = 'en-us'
+locale = 'en-us'
 title = '欣仔的技术小屋'
 
 [caches]
